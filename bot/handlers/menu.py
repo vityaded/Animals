@@ -5,17 +5,17 @@ from bot.services.progress_service import ProgressService
 from bot.storage.repositories import RepositoryProvider
 
 
-def handle_menu(
+async def handle_menu(
     repositories: RepositoryProvider,
     progress_service: ProgressService,
     telegram_id: int,
     content_service: ContentService | None = None,
 ) -> str:
-    user = repositories.users.get_user(telegram_id)
+    user = await repositories.users.get_user(telegram_id)
     if not user:
         return "Спочатку надішліть /start"
-    progress = progress_service.get_progress(user["id"], level=1)
-    stats = progress_service.get_today_stats(user["id"])
+    progress = await progress_service.get_progress(user["id"], level=1)
+    stats = await progress_service.get_today_stats(user["id"])
     streak = stats["streak"] if stats else 0
     pet_note = ""
     if content_service:

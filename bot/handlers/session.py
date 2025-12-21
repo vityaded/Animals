@@ -6,27 +6,29 @@ from bot.services.session_service import SessionService
 from bot.storage.repositories import RepositoryProvider
 
 
-def handle_start_session(
+async def handle_start_session(
     repositories: RepositoryProvider,
     session_service: SessionService,
     telegram_id: int,
     level: int,
     deadline_minutes: int,
 ) -> str:
-    user = repositories.users.get_user(telegram_id)
+    user = await repositories.users.get_user(telegram_id)
     if not user:
         return "Спочатку надішліть /start"
-    session_id = session_service.start_session(user_id=user["id"], level=level, deadline_minutes=deadline_minutes)
-    items: Iterable[str] = (item.prompt for item in session_service.get_items_for_level(level))
-    prompts = "\n".join(f"- {prompt}" for prompt in items)
-    return f"Сесія #{session_id} для рівня {level} запущена. Завдання:\n{prompts}"
+    session_id = await session_service.start_session(user_id=user["id"], level=level, deadline_minutes=deadline_minutes)
+    items: Iterable[str] = (item.prompt for item in await session_service.get_items_for_level(level))
+    first_item = next(iter(items), None)
+    if not first_item:
+        return f"Контент рівня {level} відсутній."
+    return f"Сесія #{session_id} для рівня {level} запущена. Перше завдання:\n- {first_item}"
 
 
-def handle_session_summary(session_service: SessionService, telegram_id: int, repositories: RepositoryProvider) -> str:
-    user = repositories.users.get_user(telegram_id)
+async def handle_session_summary(session_service: SessionService, telegram_id: int, repositories: RepositoryProvider) -> str:
+    user = await repositories.users.get_user(telegram_id)
     if not user:
         return "Сесія не знайдена. Спершу надішліть /start"
-    latest = session_service.get_latest_session(user["id"])
+    latest = await session_service.get_latest_session(user["id"])
     if not latest:
         return "Активних сесій немає"
     attempts = latest["attempts"]

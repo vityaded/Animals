@@ -1,10 +1,32 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from bot.services.content_service import ContentService, LevelItem
 from bot.storage.repositories import RepositoryProvider
+
+
+@dataclass
+class SessionState:
+    session_id: int
+    user_id: int
+    level: int
+    item_index: int
+    total_items: int
+    blocked: bool
+
+    @classmethod
+    def from_row(cls, row) -> "SessionState":
+        return cls(
+            session_id=row["session_id"],
+            user_id=row["user_id"],
+            level=row["level"],
+            item_index=row["item_index"],
+            total_items=row["total_items"],
+            blocked=bool(row["blocked"]),
+        )
 
 
 class SessionService:
@@ -12,15 +34,53 @@ class SessionService:
         self.repositories = repositories
         self.content_service = content_service
 
-    def start_session(self, user_id: int, level: int, deadline_minutes: int) -> int:
-        due_at = datetime.utcnow() + timedelta(minutes=deadline_minutes)
-        session_id = self.repositories.sessions.create_session(user_id, level, due_at)
-        progress = self.repositories.progress.load_progress(user_id, level)
+    async def start_session(self, user_id: int, level: int, deadline_minutes: int) -> int:
+        due_at = datetime.now(timezone.utc) + timedelta(minutes=deadline_minutes)
+        session_id = await self.repositories.sessions.create_session(user_id, level, due_at)
+        await self.repositories.sessions.update_status(session_id, "active")
+        progress = await self.repositories.progress.load_progress(user_id, level)
         if progress == 0:
-            self.repositories.progress.save_progress(user_id, level, progress)
+            await self.repositories.progress.save_progress(user_id, level, progress)
+        total_items = len(self.content_service.get_level_items(level))
+        await self.repositories.session_state.create_state(
+            session_id=session_id,
+            user_id=user_id,
+            level=level,
+            total_items=total_items,
+            item_index=0,
+            blocked=0,
+        )
         return session_id
 
-    def record_attempt(
+    async def get_active_session(self, user_id: int) -> Optional[SessionState]:
+        row = await self.repositories.session_state.get_active_state_for_user(user_id)
+        return SessionState.from_row(row) if row else None
+
+    async def get_current_item(self, level: int, item_index: int) -> LevelItem:
+        items = self.content_service.get_level_items(level)
+        if item_index >= len(items):
+            raise IndexError("Item index out of range")
+        return items[item_index]
+
+    async def advance_item(self, session_id: int) -> None:
+        state_row = await self.repositories.session_state.get_state(session_id)
+        if not state_row:
+            return
+        next_index = state_row["item_index"] + 1
+        await self.repositories.session_state.update_index(session_id, next_index)
+
+    async def finish_if_needed(self, session_id: int, user_id: int, level: int) -> bool:
+        state_row = await self.repositories.session_state.get_state(session_id)
+        if not state_row:
+            return True
+        if state_row["item_index"] < state_row["total_items"]:
+            return False
+        total, correct = await self.repositories.attempts.count_for_session(session_id)
+        await self.complete_session(session_id, user_id, level, correct, total)
+        await self.repositories.session_state.delete_state(session_id)
+        return True
+
+    async def record_attempt(
         self,
         session_id: int,
         prompt: str,
@@ -28,7 +88,7 @@ class SessionService:
         correct_answer: str,
         is_correct: bool,
     ) -> int:
-        attempt_id = self.repositories.attempts.log_attempt(
+        attempt_id = await self.repositories.attempts.log_attempt(
             session_id=session_id,
             question=prompt,
             user_answer=user_answer,
@@ -37,19 +97,27 @@ class SessionService:
         )
         return attempt_id
 
-    def complete_session(self, session_id: int, user_id: int, level: int, correct: int, total: int) -> None:
+    async def complete_session(self, session_id: int, user_id: int, level: int, correct: int, total: int) -> None:
         status = "passed" if total and correct == total else "done"
-        self.repositories.sessions.update_status(session_id, status)
-        current_progress = self.repositories.progress.load_progress(user_id, level)
+        await self.repositories.sessions.update_status(session_id, status)
+        current_progress = await self.repositories.progress.load_progress(user_id, level)
         new_progress = max(current_progress, correct)
-        self.repositories.progress.save_progress(user_id, level, new_progress)
+        await self.repositories.progress.save_progress(user_id, level, new_progress)
 
-    def get_items_for_level(self, level: int) -> list[LevelItem]:
-        return self.content_service.get_level_items(level)
-
-    def get_latest_session(self, user_id: int) -> Optional[dict]:
-        session = self.repositories.sessions.latest_session(user_id)
+    async def get_latest_session(self, user_id: int) -> Optional[dict]:
+        session = await self.repositories.sessions.latest_session(user_id)
         if not session:
             return None
-        attempts = self.repositories.attempts.attempts_for_session(session["id"])
+        attempts = await self.repositories.attempts.attempts_for_session(session["id"])
         return {"session": session, "attempts": attempts}
+
+    async def block_session(self, session_id: int) -> None:
+        await self.repositories.session_state.set_blocked(session_id, 1)
+        await self.repositories.sessions.update_status(session_id, "blocked")
+
+    async def revive_session(self, session_id: int) -> None:
+        await self.repositories.session_state.set_blocked(session_id, 0)
+        await self.repositories.sessions.update_status(session_id, "active")
+
+    async def get_items_for_level(self, level: int) -> list[LevelItem]:
+        return self.content_service.get_level_items(level)

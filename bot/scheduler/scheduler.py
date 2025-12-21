@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Awaitable, Callable, Iterable, Optional
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +27,14 @@ class ReminderScheduler:
         session_times: Iterable[str],
         reminder_minutes_before: int,
         deadline_minutes_after: int,
+        timezone: ZoneInfo,
         on_reminder: Optional[ReminderCallback] = None,
         on_deadline: Optional[DeadlineCallback] = None,
     ):
         self.session_times = list(session_times)
         self.reminder_delta = timedelta(minutes=reminder_minutes_before)
         self.deadline_delta = timedelta(minutes=deadline_minutes_after)
+        self.timezone = timezone
         self.on_reminder = on_reminder or self._log_event
         self.on_deadline = on_deadline or self._log_event
         self._task: Optional[asyncio.Task] = None
@@ -49,7 +52,7 @@ class ReminderScheduler:
 
     async def _run(self) -> None:
         while True:
-            now = datetime.now()
+            now = datetime.now(tz=self.timezone)
             next_event = self._next_event(now)
             if next_event is None:
                 await asyncio.sleep(60)

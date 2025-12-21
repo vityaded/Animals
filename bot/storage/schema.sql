@@ -64,3 +64,27 @@ CREATE TABLE IF NOT EXISTS revive (
     used INTEGER DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
+
+CREATE TABLE IF NOT EXISTS session_state (
+    session_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    level INTEGER NOT NULL,
+    item_index INTEGER NOT NULL DEFAULT 0,
+    total_items INTEGER NOT NULL,
+    blocked INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions (id),
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id INTEGER PRIMARY KEY,
+    notifications_enabled INTEGER NOT NULL DEFAULT 1,
+    timezone TEXT DEFAULT 'Europe/Helsinki',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS schema_meta (
+    version INTEGER NOT NULL
+);

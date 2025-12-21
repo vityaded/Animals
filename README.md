@@ -6,7 +6,7 @@
 - Python 3.11+
 - SQLite (вбудовано в Python) та ffmpeg для конвертації аудіо
 - Системні бібліотеки для faster-whisper (опційно OpenBLAS/FAISS)
-- pip-пакети: `faster-whisper`, `rapidfuzz`, `python-dotenv`, `aiogram` (за потреби інтеграції з Telegram)
+- pip-пакети: `faster-whisper`, `rapidfuzz`, `python-dotenv`, `aiogram`, `aiosqlite`, `pytest`
 
 Встановлення залежностей:
 
@@ -23,6 +23,8 @@ faster-whisper
 rapidfuzz
 python-dotenv
 aiogram
+aiosqlite
+pytest
 ```
 
 ## Налаштування середовища
@@ -35,6 +37,7 @@ WHISPER_MODEL=base
 SESSION_TIMES=09:00,18:00
 REMINDER_MINUTES_BEFORE=30
 DEADLINE_MINUTES_AFTER=90
+TIMEZONE=Europe/Helsinki
 ```
 
 ## Запуск
@@ -42,6 +45,12 @@ DEADLINE_MINUTES_AFTER=90
 
 ```bash
 python -m bot.main
+```
+
+Запуск Telegram-версії з aiogram і реальним polling:
+
+```bash
+python -m bot.telegram_main
 ```
 
 ## Планувальник

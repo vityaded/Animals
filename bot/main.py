@@ -23,9 +23,9 @@ async def main() -> None:
     config = Config.from_env()
     schema_path = Path(__file__).parent / "storage" / "schema.sql"
     database = Database(config.db_path, schema_path)
-    database.ensure_schema()
+    await database.ensure_schema()
 
-    repositories = RepositoryProvider(database)
+    repositories = RepositoryProvider.build(database)
     content_service = ContentService(Path("content/levels"))
     session_service = SessionService(repositories, content_service)
     progress_service = ProgressService(repositories.progress, repositories.daily_stats)
@@ -42,6 +42,7 @@ async def main() -> None:
         session_times=config.session_times,
         reminder_minutes_before=config.reminder_minutes_before,
         deadline_minutes_after=config.deadline_minutes_after,
+        timezone=config.timezone,
         on_reminder=on_reminder,
         on_deadline=on_deadline,
     )
@@ -50,11 +51,13 @@ async def main() -> None:
     logger.info("Бот готовий. Запускаємо тестові хендлери...")
     # Демонстраційні виклики бізнес-логіки
     logger.info(
-        start.handle_start(repositories, health_service, telegram_id=123, username="demo"),
+        await start.handle_start(repositories, health_service, telegram_id=123, username="demo"),
     )
-    logger.info(menu.handle_menu(repositories, progress_service, telegram_id=123, content_service=content_service))
     logger.info(
-        session.handle_start_session(
+        await menu.handle_menu(repositories, progress_service, telegram_id=123, content_service=content_service)
+    )
+    logger.info(
+        await session.handle_start_session(
             repositories,
             session_service,
             telegram_id=123,
