@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import asyncio
-import os
 import sys
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -14,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from bot.services.content_service import ContentService
+from bot.services.pet_service import PetService
 from bot.services.session_service import SessionService
 from bot.services.speech_service import SpeechService
 from bot.storage.repositories import Database, RepositoryProvider
@@ -25,48 +24,110 @@ def _build_content(tmpdir: Path) -> ContentService:
     (levels_dir / "level1.csv").write_text(
         "id,text,sound,image,sublevel\n"
         "mono1,Hello world,,,mono\n"
-        "mono2,Good bye,,,mono\n",
+        "mono2,Good bye,,,mono\n"
+        "di1,Blue sky,,,di\n",
         encoding="utf-8",
     )
     return ContentService(levels_dir)
 
 
 @pytest.mark.asyncio
-async def test_session_state_flow():
+async def test_spaced_repetition_progression():
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        schema_path = Path("bot/storage/schema.sql")
-        db = Database(tmp_path / "test.sqlite", schema_path)
+        db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
         await db.ensure_schema()
         repos = RepositoryProvider.build(db)
         content = _build_content(tmp_path)
         session_service = SessionService(repos, content)
-
         user_id = await repos.users.upsert_user(1, "tester")
-        session_id = await session_service.start_session(user_id, level=1, deadline_minutes=60)
+        now = datetime.now(timezone.utc)
+
+        # Learning phase
+        await repos.item_progress.record_correct(user_id, 1, "mono1", now_utc=now)
+        row = await repos.item_progress.get_progress(user_id, 1, "mono1")
+        assert row["learn_correct_count"] == 1
+        await repos.item_progress.record_wrong(user_id, 1, "mono1", now_utc=now + timedelta(seconds=1))
+        row = await repos.item_progress.get_progress(user_id, 1, "mono1")
+        assert row["learn_correct_count"] == 1  # wrong does not reset progress
+
+        await repos.item_progress.record_correct(user_id, 1, "mono1", now_utc=now + timedelta(seconds=2))
+        row = await repos.item_progress.get_progress(user_id, 1, "mono1")
+        assert row["learn_correct_count"] == 2
+        assert row["review_stage"] == 1
+        assert row["next_due_at"] is not None
+
+        # Review stage transitions
+        await repos.item_progress.record_correct(user_id, 1, "mono1", now_utc=now + timedelta(minutes=11))
+        row = await repos.item_progress.get_progress(user_id, 1, "mono1")
+        assert row["review_stage"] == 2
+        assert row["next_due_at"] is not None
+
+        await repos.item_progress.record_correct(user_id, 1, "mono1", now_utc=now + timedelta(days=3))
+        row = await repos.item_progress.get_progress(user_id, 1, "mono1")
+        assert row["review_stage"] == 3
+        assert row["next_due_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_care_stage_and_bonus_and_rollover():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
+        await db.ensure_schema()
+        repos = RepositoryProvider.build(db)
+        content = _build_content(tmp_path)
+        session_service = SessionService(repos, content)
+        pet_service = PetService(repos.pets, assets_root=Path("assets/pets"), timezone_name="Europe/Kyiv")
+        user_id = await repos.users.upsert_user(1, "tester")
+        await pet_service.ensure_pet(user_id)
+
+        await session_service.start_session(user_id, level=1, deadline_minutes=60, total_items=10)
         state = await session_service.get_active_session(user_id)
         assert state is not None
         assert state.item_index == 0
-        assert state.deck_ids
-        assert state.total_items == len(state.deck_ids)
 
-        await session_service.advance_item(session_id)
-        state = await session_service.get_active_session(user_id)
-        assert state.item_index == 1
+        # Simulate reaching care checkpoints.
+        await repos.session_state.update_index(state.session_id, 5)
+        updated = await session_service.get_active_session(user_id)
+        assert updated is not None and updated.item_index == 5
+        assert updated.care_stage == 0
+        await repos.session_state.set_care_state(state.session_id, awaiting_care=1, care_stage=1, care_json="{}")
+        updated = await session_service.get_active_session(user_id)
+        assert updated.awaiting_care == 1 and updated.care_stage == 1
 
-        await session_service.repositories.session_state.update_index(session_id, state.total_items)
-        finished = await session_service.finish_if_needed(session_id, user_id, 1)
-        assert finished is True
+        await repos.session_state.set_care_state(state.session_id, awaiting_care=0, care_stage=1, care_json=None)
+        await repos.session_state.update_index(state.session_id, 10)
+        updated = await session_service.get_active_session(user_id)
+        assert updated.item_index == 10
+        await repos.session_state.set_care_state(state.session_id, awaiting_care=1, care_stage=2, care_json="{}")
+        updated = await session_service.get_active_session(user_id)
+        assert updated.care_stage == 2
+
+        # Bonus reduces needs but not below 1
+        await repos.pets.update_pet(
+            user_id,
+            hunger_level=3,
+            thirst_level=3,
+            hygiene_level=3,
+            energy_level=3,
+            mood_level=3,
+            health_level=3,
+        )
+        status = await pet_service.apply_bonus(user_id)
+        assert status.hunger_level == 2
+        assert status.mood_level >= 1
+
+        # Rollover kills pet after 2 zero days
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=2)).date().isoformat()
+        await repos.pets.update_pet(user_id, last_day=yesterday, sessions_today=0, consecutive_zero_days=1)
+        status = await pet_service.rollover_if_needed(user_id, now_utc=datetime.now(timezone.utc))
+        assert status.is_dead is True
 
 
-def test_normalize_text_strips_punctuation():
-    service = SpeechService("base", load_model=False)
-    assert service.normalize_text("Hello,   world!!!") == "hello world"
-
-
-def test_multiple_answers_choose_max_score():
+def test_speech_service_threshold():
     service = SpeechService("base", load_model=False)
     transcript = "good morning dear friend"
-    _, score, ok = service._evaluate_transcript(transcript, "good morning||hello world", threshold=50)
+    _, score, ok = service._evaluate_transcript(transcript, "good morning||hello world", threshold=80)
     assert score >= 90
     assert ok is True

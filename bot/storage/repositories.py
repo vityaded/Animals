@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncIterator, Dict, Iterable, Optional
 
@@ -137,16 +137,20 @@ class SessionStateRepository:
         reward_stage: int = 0,
         mode: str = "normal",
         current_attempts: int = 0,
+        wrong_total: int = 0,
+        care_stage: int = 0,
+        awaiting_care: int = 0,
+        care_json: str | None = None,
     ) -> int:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 """
                 INSERT INTO session_state (
                     session_id, user_id, level, deck_json, item_index, total_items,
-                    correct_count, reward_stage, mode, current_attempts,
-                    blocked
+                    correct_count, reward_stage, mode, current_attempts, wrong_total,
+                    care_stage, awaiting_care, care_json, blocked
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session_id,
@@ -159,6 +163,10 @@ class SessionStateRepository:
                     reward_stage,
                     mode,
                     current_attempts,
+                    wrong_total,
+                    care_stage,
+                    awaiting_care,
+                    care_json,
                     blocked,
                 ),
             )
@@ -223,6 +231,17 @@ class SessionStateRepository:
             row = await cursor.fetchone()
             return int(row[0]) if row else 0
 
+    async def increment_wrong_total(self, session_id: int) -> int:
+        async with self.database.connect() as conn:
+            await conn.execute(
+                "UPDATE session_state SET wrong_total = wrong_total + 1, updated_at=CURRENT_TIMESTAMP WHERE session_id=?",
+                (session_id,),
+            )
+            await conn.commit()
+            cursor = await conn.execute("SELECT wrong_total FROM session_state WHERE session_id=?", (session_id,))
+            row = await cursor.fetchone()
+            return int(row[0]) if row else 0
+
     async def set_reward_stage(self, session_id: int, reward_stage: int) -> None:
         async with self.database.connect() as conn:
             await conn.execute(
@@ -237,6 +256,27 @@ class SessionStateRepository:
                 "UPDATE session_state SET blocked=?, updated_at=CURRENT_TIMESTAMP WHERE session_id=?",
                 (blocked, session_id),
             )
+            await conn.commit()
+
+    async def set_care_state(
+        self,
+        session_id: int,
+        awaiting_care: int,
+        care_stage: Optional[int] = None,
+        care_json: Optional[str] = None,
+    ) -> None:
+        updates = ["awaiting_care=?"]
+        values: list[object] = [awaiting_care]
+        if care_stage is not None:
+            updates.append("care_stage=?")
+            values.append(care_stage)
+        if care_json is not None:
+            updates.append("care_json=?")
+            values.append(care_json)
+        values.append(session_id)
+        sql = f"UPDATE session_state SET {', '.join(updates)}, updated_at=CURRENT_TIMESTAMP WHERE session_id=?"
+        async with self.database.connect() as conn:
+            await conn.execute(sql, values)
             await conn.commit()
 
     async def delete_state(self, session_id: int) -> None:
@@ -489,26 +529,109 @@ class ItemProgressRepository:
     def __init__(self, database: Database):
         self.database = database
 
-    async def mark_passed(self, user_id: int, level: int, content_id: str) -> None:
+    async def _ensure_row(self, user_id: int, level: int, content_id: str) -> None:
         async with self.database.connect() as conn:
             await conn.execute(
                 """
-                INSERT INTO item_progress (user_id, level, content_id, passed_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id, level, content_id) DO UPDATE SET passed_at=CURRENT_TIMESTAMP
+                INSERT INTO item_progress (user_id, level, content_id)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, level, content_id) DO NOTHING
                 """,
                 (user_id, level, content_id),
             )
             await conn.commit()
 
-    async def list_passed(self, user_id: int, level: int) -> set[str]:
+    async def get_progress(self, user_id: int, level: int, content_id: str) -> Optional[aiosqlite.Row]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
-                "SELECT content_id FROM item_progress WHERE user_id=? AND level=?",
-                (user_id, level),
+                "SELECT * FROM item_progress WHERE user_id=? AND level=? AND content_id=?",
+                (user_id, level, content_id),
+            )
+            return await cursor.fetchone()
+
+    async def list_all(self, user_id: int) -> list[aiosqlite.Row]:
+        async with self.database.connect() as conn:
+            cursor = await conn.execute("SELECT * FROM item_progress WHERE user_id=?", (user_id,))
+            return await cursor.fetchall()
+
+    async def get_due_items(self, user_id: int, now_utc: datetime) -> list[tuple[int, str, Optional[datetime]]]:
+        async with self.database.connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT level, content_id, next_due_at
+                FROM item_progress
+                WHERE user_id=? AND next_due_at IS NOT NULL AND next_due_at <= ?
+                ORDER BY next_due_at ASC
+                """,
+                (user_id, now_utc),
             )
             rows = await cursor.fetchall()
-            return {row["content_id"] for row in rows} if rows else set()
+            return [(int(r["level"]), r["content_id"], r["next_due_at"]) for r in rows] if rows else []
+
+    async def record_correct(self, user_id: int, level: int, content_id: str, now_utc: datetime) -> None:
+        await self._ensure_row(user_id, level, content_id)
+        async with self.database.connect() as conn:
+            row_cursor = await conn.execute(
+                "SELECT learn_correct_count, review_stage FROM item_progress WHERE user_id=? AND level=? AND content_id=?",
+                (user_id, level, content_id),
+            )
+            row = await row_cursor.fetchone()
+            learn_count = int(row["learn_correct_count"]) if row and row["learn_correct_count"] is not None else 0
+            review_stage = int(row["review_stage"]) if row and row["review_stage"] is not None else 0
+
+            if review_stage == 0 and learn_count < 2:
+                learn_count += 1
+                if learn_count >= 2:
+                    review_stage = 1
+                    next_due_at = now_utc + timedelta(minutes=10)
+                else:
+                    next_due_at = None
+            elif review_stage == 1:
+                review_stage = 2
+                next_due_at = now_utc + timedelta(days=2)
+            elif review_stage == 2:
+                review_stage = 3
+                next_due_at = None
+            else:
+                next_due_at = None
+
+            await conn.execute(
+                """
+                UPDATE item_progress
+                SET learn_correct_count=?, review_stage=?, next_due_at=?, last_seen_at=?
+                WHERE user_id=? AND level=? AND content_id=?
+                """,
+                (
+                    learn_count,
+                    review_stage,
+                    next_due_at,
+                    now_utc,
+                    user_id,
+                    level,
+                    content_id,
+                ),
+            )
+            await conn.commit()
+
+    async def record_wrong(self, user_id: int, level: int, content_id: str, now_utc: datetime) -> None:
+        await self._ensure_row(user_id, level, content_id)
+        async with self.database.connect() as conn:
+            row_cursor = await conn.execute(
+                "SELECT review_stage FROM item_progress WHERE user_id=? AND level=? AND content_id=?",
+                (user_id, level, content_id),
+            )
+            row = await row_cursor.fetchone()
+            review_stage = int(row["review_stage"]) if row and row["review_stage"] is not None else 0
+            next_due_at = now_utc + timedelta(minutes=10) if review_stage >= 1 else None
+            await conn.execute(
+                """
+                UPDATE item_progress
+                SET next_due_at=?, last_seen_at=?
+                WHERE user_id=? AND level=? AND content_id=?
+                """,
+                (next_due_at, now_utc, user_id, level, content_id),
+            )
+            await conn.commit()
 
 
 @dataclass

@@ -52,11 +52,11 @@ class SpeechService:
     async def transcribe_async(self, audio_bytes: bytes) -> str:
         return await asyncio.to_thread(self.transcribe, audio_bytes)
 
-    def evaluate(self, audio_bytes: bytes, expected_text: str, threshold: int = 85) -> Tuple[str, int, bool]:
+    def evaluate(self, audio_bytes: bytes, expected_text: str, threshold: int = 80) -> Tuple[str, int, bool]:
         transcript = self.transcribe(audio_bytes)
         return self._evaluate_transcript(transcript, expected_text, threshold)
 
-    async def evaluate_async(self, audio_bytes: bytes, expected_text: str, threshold: int = 85) -> Tuple[str, int, bool]:
+    async def evaluate_async(self, audio_bytes: bytes, expected_text: str, threshold: int = 80) -> Tuple[str, int, bool]:
         transcript = await self.transcribe_async(audio_bytes)
         return self._evaluate_transcript(transcript, expected_text, threshold)
 

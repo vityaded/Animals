@@ -153,11 +153,60 @@ async def _upgrade_to_v5(conn: aiosqlite.Connection) -> None:
         await conn.execute("ALTER TABLE session_state ADD COLUMN mode TEXT NOT NULL DEFAULT 'normal'")
 
 
+async def _upgrade_to_v6(conn: aiosqlite.Connection) -> None:
+    # Session state columns for care/bad attempts.
+    cursor = await conn.execute("PRAGMA table_info(session_state)")
+    existing_cols = {row[1] for row in await cursor.fetchall()}
+    additions = [
+        ("wrong_total", "INTEGER NOT NULL DEFAULT 0"),
+        ("care_stage", "INTEGER NOT NULL DEFAULT 0"),
+        ("awaiting_care", "INTEGER NOT NULL DEFAULT 0"),
+        ("care_json", "TEXT"),
+    ]
+    for name, coldef in additions:
+        if name not in existing_cols:
+            await conn.execute(f"ALTER TABLE session_state ADD COLUMN {name} {coldef}")
+
+    # Item progress spaced repetition fields.
+    cursor = await conn.execute("PRAGMA table_info(item_progress)")
+    existing_cols = {row[1] for row in await cursor.fetchall()}
+    item_additions = [
+        ("learn_correct_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("review_stage", "INTEGER NOT NULL DEFAULT 0"),
+        ("next_due_at", "TIMESTAMP"),
+        ("last_seen_at", "TIMESTAMP"),
+    ]
+    for name, coldef in item_additions:
+        if name not in existing_cols:
+            await conn.execute(f"ALTER TABLE item_progress ADD COLUMN {name} {coldef}")
+    # legacy passed_at column can remain; new columns take precedence in code.
+
+    # Pet table discrete needs.
+    cursor = await conn.execute("PRAGMA table_info(pets)")
+    existing_cols = {row[1] for row in await cursor.fetchall()}
+    pet_additions = [
+        ("hunger_level", "INTEGER NOT NULL DEFAULT 1"),
+        ("thirst_level", "INTEGER NOT NULL DEFAULT 1"),
+        ("hygiene_level", "INTEGER NOT NULL DEFAULT 1"),
+        ("energy_level", "INTEGER NOT NULL DEFAULT 1"),
+        ("mood_level", "INTEGER NOT NULL DEFAULT 1"),
+        ("health_level", "INTEGER NOT NULL DEFAULT 1"),
+        ("sessions_today", "INTEGER NOT NULL DEFAULT 0"),
+        ("last_day", "TEXT"),
+        ("consecutive_zero_days", "INTEGER NOT NULL DEFAULT 0"),
+    ]
+    for name, coldef in pet_additions:
+        if name not in existing_cols:
+            await conn.execute(f"ALTER TABLE pets ADD COLUMN {name} {coldef}")
+    # Keep existing columns like action_tokens but they will be ignored by new logic.
+
+
 MIGRATIONS: dict[int, MigrationStep] = {
     2: _upgrade_to_v2,
     3: _upgrade_to_v3,
     4: _upgrade_to_v4,
     5: _upgrade_to_v5,
+    6: _upgrade_to_v6,
 }
 
 
