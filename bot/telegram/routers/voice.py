@@ -33,7 +33,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
             await message.answer("Немає активної картки.")
             return
         item = await ctx.session_service.get_current_item(deck_item)
-        await ctx.task_presenter.send_listen_and_read(message, item)
+        await ctx.task_presenter.send_listen_and_read(message, item, reply_markup=repeat_inline_kb())
 
     @router.message(Command("stop"))
     async def cmd_stop(message: types.Message) -> None:

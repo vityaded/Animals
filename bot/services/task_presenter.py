@@ -7,7 +7,6 @@ from aiogram.types import FSInputFile
 
 from bot.services.content_service import ContentItem
 from bot.services.tts_service import TTSService, TTSUnavailableError
-from bot.telegram.keyboards import repeat_inline_kb
 
 
 class TaskPresenter:
@@ -38,16 +37,19 @@ class TaskPresenter:
             image_path = Path(item.image)
         return image_path if image_path.exists() else None
 
-    async def send_listen_and_read(self, message: types.Message, item: ContentItem) -> None:
+    async def send_listen_and_read(
+        self,
+        message: types.Message,
+        item: ContentItem,
+        reply_markup: types.ReplyKeyboardMarkup | types.InlineKeyboardMarkup | None = None,
+    ) -> None:
         try:
             audio_path = await self._resolve_audio(item)
         except TTSUnavailableError:
             audio_path = None
         image_path = self._resolve_image(item)
 
-        text_msg = await message.answer(
-            f"Прослухай і прочитай.\n\n{item.text}", reply_markup=repeat_inline_kb()
-        )
+        text_msg = await message.answer(f"Прослухай і прочитай:\n{item.text}", reply_markup=reply_markup)
 
         if audio_path:
             await text_msg.answer_voice(FSInputFile(audio_path))

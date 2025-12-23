@@ -6,7 +6,7 @@ from aiogram import F, Router, types
 from aiogram.filters import Command, CommandObject
 
 from bot.telegram import AppContext
-from bot.telegram.keyboards import BTN_CARE, care_inline_kb
+from bot.telegram.keyboards import BTN_CARE, care_inline_kb, repeat_inline_kb
 
 
 def setup_session_router(ctx: AppContext) -> Router:
@@ -21,7 +21,7 @@ def setup_session_router(ctx: AppContext) -> Router:
             await message.answer("Немає карток для показу.")
             return
         item = await ctx.session_service.get_current_item(current)
-        await ctx.task_presenter.send_listen_and_read(message, item)
+        await ctx.task_presenter.send_listen_and_read(message, item, reply_markup=repeat_inline_kb())
 
     async def _start_or_continue(message: types.Message, level: int | None = None) -> None:
         user = await _ensure_user(message)
