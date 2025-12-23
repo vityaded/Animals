@@ -13,6 +13,7 @@ from bot.services.progress_service import ProgressService
 from bot.services.session_service import SessionService
 from bot.services.speech_service import SpeechService
 from bot.storage.repositories import Database, RepositoryProvider
+from bot.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ async def main() -> None:
     await database.ensure_schema()
 
     repositories = RepositoryProvider.build(database)
-    content_service = ContentService(Path("content/levels"))
+    content_service = ContentService(project_path("content/levels"))
     session_service = SessionService(repositories, content_service)
     progress_service = ProgressService(repositories.progress, repositories.daily_stats)
     health_service = HealthService(repositories.health, repositories.revive)

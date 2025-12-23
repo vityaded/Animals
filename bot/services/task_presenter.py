@@ -7,11 +7,12 @@ from aiogram.types import FSInputFile
 
 from bot.services.content_service import ContentItem
 from bot.services.tts_service import TTSService, TTSUnavailableError
+from bot.paths import resolve_project_path
 
 
 class TaskPresenter:
     def __init__(self, assets_root: Path, tts_service: TTSService):
-        self.assets_root = Path(assets_root)
+        self.assets_root = resolve_project_path(assets_root)
         self.tts_service = tts_service
 
     async def _resolve_audio(self, item: ContentItem) -> Path:

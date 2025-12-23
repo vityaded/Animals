@@ -18,6 +18,7 @@ from bot.services.tts_service import TTSService
 from bot.services.pet_service import PetService
 from bot.storage.repositories import Database, RepositoryProvider
 from bot.telegram import AppContext
+from bot.paths import project_path
 from bot.telegram.routers.menu import setup_menu_router
 from bot.telegram.routers.session import setup_session_router
 from bot.telegram.routers.start import setup_start_router
@@ -35,16 +36,16 @@ async def main() -> None:
     await database.ensure_schema()
 
     repositories = RepositoryProvider.build(database)
-    content_service = ContentService(Path("content/levels"))
+    content_service = ContentService(project_path("content/levels"))
     session_service = SessionService(repositories, content_service)
     progress_service = ProgressService(repositories.progress, repositories.daily_stats)
     health_service = HealthService(repositories.health, repositories.revive)
     speech_service = SpeechService(config.whisper_model)
     tts_service = TTSService()
-    task_presenter = TaskPresenter(Path("assets"), tts_service)
+    task_presenter = TaskPresenter(project_path("assets"), tts_service)
     pet_service = PetService(
         repo=repositories.pets,
-        assets_root=Path("assets/pets"),
+        assets_root=project_path("assets/pets"),
         timezone_name=str(config.timezone),
     )
 
