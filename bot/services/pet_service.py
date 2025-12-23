@@ -175,14 +175,6 @@ class PetService:
 
     async def apply_care_choice(self, user_id: int, action_key: str, active_need_key: str) -> PetStatus:
         status = await self._load_status(user_id)
-        levels = {
-            "hunger": status.hunger_level,
-            "thirst": status.thirst_level,
-            "hygiene": status.hygiene_level,
-            "energy": status.energy_level,
-            "mood": status.mood_level,
-            "health": status.health_level,
-        }
         action_to_need = {
             "feed": "hunger",
             "water": "thirst",
@@ -192,6 +184,15 @@ class PetService:
             "heal": "health",
         }
         chosen_need = action_to_need.get(action_key, action_key)
+
+        levels = {
+            "hunger": status.hunger_level,
+            "thirst": status.thirst_level,
+            "hygiene": status.hygiene_level,
+            "energy": status.energy_level,
+            "mood": status.mood_level,
+            "health": status.health_level,
+        }
         if chosen_need == active_need_key:
             levels[chosen_need] = max(1, levels[chosen_need] - 2)
         elif chosen_need in levels:
