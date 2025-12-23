@@ -1,3 +1,11 @@
-prompt,answer,hint
-"Describe a funny behavior","My dog spins when it is happy","Mention emotion"
-"Thank the pet for waiting","Thank you for waiting for me","Express gratitude"
+id,text,sound,image
+sent1,ми читаємо історію про кота,,,
+sent2,пес радіє коли я приходжу додому,,,
+sent3,сьогодні я приніс нову цікаву книгу,,,
+sent4,будь ласка зачекай поки я закінчу читати,,,
+sent5,дякую що терпляче чекаєш мене завжди,,,
+sent6,ми з другом читаємо вголос кожного дня,,,
+sent7,я обіцяю пограти з тобою після уроків,,,
+sent8,моя тваринка весело стрибає біля мене,,,
+sent9,я тихо читаю щоб не розбудити кота,,,
+sent10,ми разом слухаємо і читаємо казку,,,

@@ -5,6 +5,7 @@
 ## Залежності
 - Python 3.11+
 - SQLite (вбудовано в Python) та ffmpeg для конвертації аудіо
+- espeak-ng для офлайн TTS (генерація озвучки контенту)
 - Системні бібліотеки для faster-whisper (опційно OpenBLAS/FAISS)
 - pip-пакети: `faster-whisper`, `rapidfuzz`, `python-dotenv`, `aiogram`, `aiosqlite`, `pytest`
 
@@ -14,6 +15,12 @@
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt  # або встановіть пакети вручну
+```
+
+Для TTS встановіть espeak-ng:
+
+```bash
+sudo apt-get update && sudo apt-get install -y espeak-ng
 ```
 
 Приклад `requirements.txt`:

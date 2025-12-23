@@ -1,3 +1,11 @@
-prompt,answer,hint
-"Introduce your pet in English","This is my cat, it is playful","Start with 'This is my...'"
-"Say the pet's favorite food","It loves fish","Mention the food"
+id,text,sound,image,sublevel
+mono1,кіт,,,mono
+mono2,пес,,,mono
+mono3,сік,,,mono
+mono4,м'яч,,,mono
+mono5,хліб,,,mono
+di1,киця спить,,,"di"
+di2,песик біжить,,,"di"
+di3,вода холодна,,,"di"
+di4,мама читає,,,"di"
+di5,сонце гріє,,,"di"

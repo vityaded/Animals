@@ -14,14 +14,24 @@ class ProgressService:
         await self.progress_repository.save_progress(user_id, level, progress)
         await self.daily_stats_repository.update_stats(user_id, date.today().isoformat(), attempts, correct, streak)
 
-    async def update_after_attempt(self, user_id: int, level: int, is_correct: bool) -> int:
+    async def update_after_attempt(self, user_id: int, level: int, is_correct: bool, is_first_try: bool) -> int:
         today = date.today().isoformat()
         current_stats = await self.daily_stats_repository.get_stats(user_id, today)
         streak = current_stats["streak"] if current_stats else 0
         streak = streak + 1 if is_correct else 0
         attempts = 1
         correct = 1 if is_correct else 0
-        await self.daily_stats_repository.update_stats(user_id, today, attempts, correct, streak)
+        first_try_total = 1 if is_first_try else 0
+        first_try_errors = 1 if is_first_try and not is_correct else 0
+        await self.daily_stats_repository.update_stats(
+            user_id,
+            today,
+            attempts,
+            correct,
+            streak,
+            first_try_total=first_try_total,
+            first_try_errors=first_try_errors,
+        )
         return streak
 
     async def update_after_session(self, user_id: int, level: int, correct: int, total: int) -> None:

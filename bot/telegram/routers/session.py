@@ -17,9 +17,8 @@ def setup_session_router(ctx: AppContext) -> Router:
         return await ctx.repositories.users.get_user(message.from_user.id)
 
     async def _send_current_task(message: types.Message, state) -> None:
-        # Kid UI: show only what to read.
-        item = await ctx.session_service.get_current_item(state.level, state.item_index)
-        await message.answer(f"{BTN_READ}:\n{item.answer}")
+        item = await ctx.session_service.get_current_item(state.level, state.deck_ids, state.item_index)
+        await ctx.task_presenter.send_listen_and_read(message, item)
 
     def _today_range_utc() -> tuple[datetime, datetime]:
         tz = ZoneInfo(ctx.timezone)
@@ -28,7 +27,7 @@ def setup_session_router(ctx: AppContext) -> Router:
         end_local = start_local + timedelta(days=1)
         return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
-    async def _start_or_continue(message: types.Message, level: int = 1) -> None:
+    async def _start_or_continue(message: types.Message, level: int | None = None) -> None:
         user = await _ensure_user(message)
         if not user:
             await message.answer("Спочатку натисни /start")
@@ -62,11 +61,15 @@ def setup_session_router(ctx: AppContext) -> Router:
             await message.answer("На сьогодні все. Побачимось завтра.")
             return
 
+        user_level = level if level is not None else int(user.get("current_level", 1))
         await ctx.pet_service.reset_action_tokens(user["id"])
-        await ctx.session_service.start_session(user_id=user["id"], level=level, deadline_minutes=240)
+        await ctx.session_service.start_session(user_id=user["id"], level=user_level, deadline_minutes=240)
         state = await ctx.session_service.get_active_session(user["id"])
         if not state:
             await message.answer("Не вдалося почати сесію.")
+            return
+        if state.total_items == 0:
+            await message.answer("Контент недоступний для цього рівня.")
             return
         await _send_current_task(message, state)
 

@@ -1,3 +1,11 @@
-prompt,answer,hint
-"Ask for a walk politely","Could we go for a walk?","Be polite"
-"Promise to feed later","I will feed you after dinner","Use future tense"
+id,text,sound,image
+ph1,я люблю читати книги,,,
+ph2,ми граємо у м'яч,,,
+ph3,песик хоче воду,,,
+ph4,тато читає казку,,,
+ph5,мій кіт спить,,,
+ph6,дякую що чекаєш,,,
+ph7,будь ласка допоможи,,,
+ph8,я скоро прийду,,,
+ph9,ти молодець друже,,,
+ph10,ми підемо гуляти,,,
