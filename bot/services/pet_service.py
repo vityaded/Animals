@@ -244,7 +244,7 @@ class PetService:
             return "health_3"
         need_key, level = self._worst_need(status)
         if level <= 1:
-            return "happy"
+            return "mood_1"
         return f"{need_key}_{level}"
 
     def asset_path(self, pet_type: str, state: str) -> Optional[Path]:
@@ -273,7 +273,21 @@ class PetService:
         if path:
             return path
 
-        return find("happy")
+        path = find("mood_1")
+        if path:
+            return path
+
+        images: list[Path] = []
+        for entry in pet_dir.iterdir():
+            if not entry.is_file():
+                continue
+            name = entry.name.lower()
+            if name.endswith(PLACEHOLDER_SUFFIX):
+                continue
+            if entry.suffix.lower() in IMAGE_EXTS:
+                images.append(entry)
+        images.sort(key=lambda p: p.name.lower())
+        return images[0] if images else None
 
     def status_text(self, status: PetStatus) -> str:
         if status.is_dead:

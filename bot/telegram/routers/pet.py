@@ -80,7 +80,7 @@ def setup_pet_router(ctx: AppContext) -> Router:
         await ctx.pet_service.choose_pet(user["id"], pet_type)
         await callback.answer()
         await callback.message.answer(f"✅ Обрано: {pet_type}")
-        await _send_pet_card(callback, user["id"])
+        # Start the session flow; it will show the pet card once (avoid duplicate status messages).
         await start_or_continue(ctx, callback.message, level=None, user_id=user["telegram_id"])
 
     @router.message(Command("pet"))
