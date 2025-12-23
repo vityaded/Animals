@@ -18,7 +18,7 @@ from bot.services.tts_service import TTSService
 from bot.services.pet_service import PetService
 from bot.storage.repositories import Database, RepositoryProvider
 from bot.telegram import AppContext
-from bot.paths import project_path
+from bot.paths import project_path, resolve_project_path
 from bot.telegram.routers.menu import setup_menu_router
 from bot.telegram.routers.session import setup_session_router
 from bot.telegram.routers.start import setup_start_router
@@ -45,7 +45,7 @@ async def main() -> None:
     task_presenter = TaskPresenter(project_path("assets"), tts_service)
     pet_service = PetService(
         repo=repositories.pets,
-        assets_root=project_path("assets/pets"),
+        assets_root=resolve_project_path(config.pets_assets_root),
         timezone_name=str(config.timezone),
     )
 

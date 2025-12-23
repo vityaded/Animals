@@ -6,7 +6,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/workspace/Animals
 EnvironmentFile=/workspace/Animals/.env
-ExecStart=/usr/bin/python -m bot.telegram_main
+Environment=PETS_ASSETS_ROOT=/workspace/Animals/assets/pets
+ExecStart=/workspace/Animals/.venv/bin/python -m bot.telegram_main
 Restart=on-failure
 User=bot
 Group=bot

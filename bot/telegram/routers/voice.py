@@ -8,10 +8,10 @@ from io import BytesIO
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
+from bot.telegram.media import answer_photo_safe
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
             if wrong_total <= 2:
                 pet = await ctx.pet_service.apply_bonus(state.user_id)
                 bonus_path = ctx.pet_service.asset_path(pet.pet_type, f"bonus_{random.randint(1,10)}")
-                if bonus_path and bonus_path.exists():
-                    await message.answer_photo(FSInputFile(bonus_path))
+                await answer_photo_safe(message, bonus_path if (bonus_path and bonus_path.exists()) else None)
             await message.answer("Готово!")
         else:
             await ctx.pet_service.revive(state.user_id)
@@ -230,10 +229,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
         await ctx.repositories.session_state.set_care_state(state.session_id, awaiting_care=0, care_json=None)
         image_key = ctx.pet_service.pick_state(status)
         img = ctx.pet_service.asset_path(status.pet_type, image_key)
-        if img and img.exists():
-            await callback.message.answer_photo(FSInputFile(img), caption="Тваринка рада")
-        else:
-            await callback.message.answer("Тваринка рада")
+        await answer_photo_safe(callback.message, img if (img and img.exists()) else None, caption="Тваринка рада")
         updated_state = await ctx.session_service.get_active_session(user["id"])
         if not updated_state:
             await callback.answer()
