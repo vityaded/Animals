@@ -27,3 +27,4 @@ class AppContext:
     tts_service: "TTSService"
     task_presenter: "TaskPresenter"
     timezone: str
+    admin_ids: set[int]

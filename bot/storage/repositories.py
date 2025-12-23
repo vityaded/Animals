@@ -5,11 +5,19 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import AsyncIterator, Dict, Iterable, Optional
+from typing import AsyncIterator, Dict, Iterable, List, Optional
 
 import aiosqlite
 
 from bot.storage import migrations
+
+
+def _row_to_dict(row: aiosqlite.Row | None) -> Optional[dict]:
+    return dict(row) if row is not None else None
+
+
+def _rows_to_dicts(rows: Iterable[aiosqlite.Row] | None) -> list[dict]:
+    return [dict(r) for r in rows] if rows else []
 
 
 class Database:
@@ -58,15 +66,17 @@ class UserRepository:
             existing = await row.fetchone()
             return int(existing[0])
 
-    async def get_user(self, telegram_id: int) -> Optional[aiosqlite.Row]:
+    async def get_user(self, telegram_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM users WHERE telegram_id=?", (telegram_id,))
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
-    async def get_user_by_id(self, user_id: int) -> Optional[aiosqlite.Row]:
+    async def get_user_by_id(self, user_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM users WHERE id=?", (user_id,))
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
 
 class SessionRepository:
@@ -87,21 +97,23 @@ class SessionRepository:
             await conn.execute("UPDATE sessions SET status=? WHERE id=?", (status, session_id))
             await conn.commit()
 
-    async def latest_session(self, user_id: int) -> Optional[aiosqlite.Row]:
+    async def latest_session(self, user_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 "SELECT * FROM sessions WHERE user_id=? ORDER BY started_at DESC LIMIT 1",
                 (user_id,),
             )
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
-    async def get_active_sessions(self, now: datetime) -> Iterable[aiosqlite.Row]:
+    async def get_active_sessions(self, now: datetime) -> List[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 "SELECT * FROM sessions WHERE status IN ('pending','active') AND (due_at IS NULL OR due_at >= ?)",
                 (now,),
             )
-            return await cursor.fetchall()
+            rows = await cursor.fetchall()
+            return _rows_to_dicts(rows)
 
     async def count_sessions_started_between(self, user_id: int, start_utc: datetime, end_utc: datetime) -> int:
         """Count sessions whose started_at is within [start_utc, end_utc). started_at is stored in UTC."""
@@ -173,12 +185,13 @@ class SessionStateRepository:
             await conn.commit()
             return cursor.lastrowid
 
-    async def get_state(self, session_id: int) -> Optional[aiosqlite.Row]:
+    async def get_state(self, session_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM session_state WHERE session_id=?", (session_id,))
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
-    async def get_active_state_for_user(self, user_id: int) -> Optional[aiosqlite.Row]:
+    async def get_active_state_for_user(self, user_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 """
@@ -189,7 +202,8 @@ class SessionStateRepository:
                 """,
                 (user_id,),
             )
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
     async def update_index(self, session_id: int, item_index: int) -> None:
         async with self.database.connect() as conn:
@@ -329,10 +343,11 @@ class AttemptRepository:
             await conn.commit()
             return cursor.lastrowid
 
-    async def attempts_for_session(self, session_id: int) -> Iterable[aiosqlite.Row]:
+    async def attempts_for_session(self, session_id: int) -> List[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM attempts WHERE session_id=?", (session_id,))
-            return await cursor.fetchall()
+            rows = await cursor.fetchall()
+            return _rows_to_dicts(rows)
 
     async def count_for_session(self, session_id: int) -> tuple[int, int]:
         async with self.database.connect() as conn:
@@ -402,10 +417,11 @@ class DailyStatsRepository:
             )
             await conn.commit()
 
-    async def get_stats(self, user_id: int, date: str) -> Optional[aiosqlite.Row]:
+    async def get_stats(self, user_id: int, date: str) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM daily_stats WHERE user_id=? AND date=?", (user_id, date))
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
 
 class HealthRepository:
@@ -444,13 +460,14 @@ class ReviveRepository:
             await conn.commit()
             return cursor.lastrowid
 
-    async def get_active_token(self, user_id: int) -> Optional[aiosqlite.Row]:
+    async def get_active_token(self, user_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 "SELECT * FROM revive WHERE user_id=? AND used=0 AND expires_at > CURRENT_TIMESTAMP ORDER BY expires_at DESC LIMIT 1",
                 (user_id,),
             )
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
     async def mark_used(self, revive_id: int) -> None:
         async with self.database.connect() as conn:
@@ -474,15 +491,17 @@ class UserSettingsRepository:
             )
             await conn.commit()
 
-    async def load_settings(self, user_id: int) -> Optional[aiosqlite.Row]:
+    async def load_settings(self, user_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM user_settings WHERE user_id=?", (user_id,))
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
-    async def users_with_notifications(self) -> Iterable[aiosqlite.Row]:
+    async def users_with_notifications(self) -> List[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM user_settings WHERE notifications_enabled=1")
-            return await cursor.fetchall()
+            rows = await cursor.fetchall()
+            return _rows_to_dicts(rows)
 
 
 class PetRepository:
@@ -501,10 +520,11 @@ class PetRepository:
             )
             await conn.commit()
 
-    async def load_pet(self, user_id: int) -> Optional[aiosqlite.Row]:
+    async def load_pet(self, user_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM pets WHERE user_id=?", (user_id,))
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
     async def set_pet_type(self, user_id: int, pet_type: str) -> None:
         async with self.database.connect() as conn:
@@ -541,18 +561,20 @@ class ItemProgressRepository:
             )
             await conn.commit()
 
-    async def get_progress(self, user_id: int, level: int, content_id: str) -> Optional[aiosqlite.Row]:
+    async def get_progress(self, user_id: int, level: int, content_id: str) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 "SELECT * FROM item_progress WHERE user_id=? AND level=? AND content_id=?",
                 (user_id, level, content_id),
             )
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
 
-    async def list_all(self, user_id: int) -> list[aiosqlite.Row]:
+    async def list_all(self, user_id: int) -> list[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute("SELECT * FROM item_progress WHERE user_id=?", (user_id,))
-            return await cursor.fetchall()
+            rows = await cursor.fetchall()
+            return _rows_to_dicts(rows)
 
     async def get_due_items(self, user_id: int, now_utc: datetime) -> list[tuple[int, str, Optional[datetime]]]:
         async with self.database.connect() as conn:
@@ -636,6 +658,7 @@ class ItemProgressRepository:
 
 @dataclass
 class RepositoryProvider:
+    database: Database
     users: UserRepository
     sessions: SessionRepository
     session_state: SessionStateRepository
@@ -651,6 +674,7 @@ class RepositoryProvider:
     @classmethod
     def build(cls, database: Database) -> "RepositoryProvider":
         return cls(
+            database=database,
             users=UserRepository(database),
             sessions=SessionRepository(database),
             session_state=SessionStateRepository(database),
@@ -666,3 +690,24 @@ class RepositoryProvider:
 
     def as_dict(self) -> Dict[str, object]:
         return self.__dict__.copy()
+
+    async def reset_all(self) -> None:
+        async with self.database.connect() as conn:
+            await conn.execute("PRAGMA foreign_keys=OFF")
+            for table in (
+                "attempts",
+                "session_state",
+                "sessions",
+                "level_progress",
+                "daily_stats",
+                "health",
+                "revive",
+                "user_settings",
+                "pets",
+                "item_progress",
+                "users",
+            ):
+                await conn.execute(f"DELETE FROM {table}")
+            await conn.execute("VACUUM")
+            await conn.execute("PRAGMA foreign_keys=ON")
+            await conn.commit()
