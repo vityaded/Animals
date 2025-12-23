@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from io import BytesIO
 
-from aiogram import Router, types
+from aiogram import F, Router, types
 from aiogram.filters import Command
 
 from bot.telegram import AppContext
@@ -38,7 +38,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
         await ctx.session_service.complete_session(state.session_id, user["id"], state.level, 0, state.total_items)
         await message.answer("Сесію завершено.")
 
-    @router.message(content_types=types.ContentType.VOICE)
+    @router.message(F.voice)
     async def handle_voice(message: types.Message) -> None:
         user, state = await _load_active(message)
         if not user:

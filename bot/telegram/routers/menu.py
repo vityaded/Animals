@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import Router, types
+from aiogram.filters import Command
 
 from bot.telegram import AppContext
 
@@ -8,7 +9,7 @@ from bot.telegram import AppContext
 def setup_menu_router(ctx: AppContext) -> Router:
     router = Router()
 
-    @router.message(commands=["menu"])
+    @router.message(Command("menu"))
     async def cmd_menu(message: types.Message) -> None:
         user = await ctx.repositories.users.get_user(message.from_user.id)
         if not user:
