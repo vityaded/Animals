@@ -1,0 +1,13 @@
+[Unit]
+Description=Animals Reading Telegram Bot
+After=network.target
+
+[Service]
+WorkingDirectory=/workspace/Animals
+ExecStartPre=/usr/bin/mkdir -p /workspace/Animals/var
+ExecStart=/workspace/Animals/.venv/bin/python -m bot.main
+Restart=always
+EnvironmentFile=/workspace/Animals/.env
+
+[Install]
+WantedBy=multi-user.target
