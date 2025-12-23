@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import Router, types
+from aiogram.filters import Command, CommandStart
 
 from bot.telegram import AppContext
 from bot.telegram.keyboards import main_menu_kb, choose_pet_inline_kb
@@ -9,7 +10,7 @@ from bot.telegram.keyboards import main_menu_kb, choose_pet_inline_kb
 def setup_start_router(ctx: AppContext) -> Router:
     router = Router()
 
-    @router.message(commands=["start"])
+    @router.message(CommandStart())
     async def cmd_start(message: types.Message) -> None:
         user_id = await ctx.repositories.users.upsert_user(message.from_user.id, message.from_user.username)
         await ctx.repositories.user_settings.ensure_settings(user_id, timezone=ctx.timezone)
@@ -24,7 +25,7 @@ def setup_start_router(ctx: AppContext) -> Router:
             reply_markup=choose_pet_inline_kb(),
         )
 
-    @router.message(commands=["revive"])
+    @router.message(Command("revive"))
     async def cmd_revive(message: types.Message) -> None:
         user = await ctx.repositories.users.get_user(message.from_user.id)
         if not user:

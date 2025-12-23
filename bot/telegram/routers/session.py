@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router, types
-from aiogram.filters import CommandObject
+from aiogram.filters import Command, CommandObject
 from aiogram.types import FSInputFile
 
 from pathlib import Path
@@ -20,7 +20,7 @@ def setup_session_router(ctx: AppContext) -> Router:
         item = await ctx.session_service.get_current_item(state.level, state.item_index)
         await message.answer(f"Завдання #{state.item_index + 1}: {item.prompt}", reply_markup=session_inline_kb())
 
-    @router.message(commands=["session"])
+    @router.message(Command("session"))
     async def cmd_session(message: types.Message, command: CommandObject) -> None:
         user = await _ensure_user(message)
         if not user:
