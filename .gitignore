@@ -67,10 +67,6 @@ Thumbs.db
 # =========================
 # Binary assets (keep placeholders in repo)
 # =========================
-assets/**/*.[Pp][Nn][Gg]
-assets/**/*.[Jj][Pp][Gg]
-assets/**/*.[Jj][Pp][Ee][Gg]
-assets/**/*.[Ww][Ee][Bb][Pp]
 
 # Optional: generated helper file (remove this line if you want it tracked)
 assets/pets/_progress.json
