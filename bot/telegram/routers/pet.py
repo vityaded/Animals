@@ -78,10 +78,8 @@ def setup_pet_router(ctx: AppContext) -> Router:
         await ctx.pet_service.choose_pet(user["id"], pet_type)
         await callback.answer()
         await callback.message.answer(f"✅ Обрано: {pet_type}")
-        if previous_pet is None:
-            await start_or_continue(ctx, callback.message, level=None, user_id=user["telegram_id"])
-        else:
-            await _send_pet_card(callback, user["id"])
+        await _send_pet_card(callback, user["id"])
+        await start_or_continue(ctx, callback.message, level=None, user_id=user["telegram_id"])
 
     @router.message(Command("pet"))
     async def cmd_pet(message: types.Message) -> None:

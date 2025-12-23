@@ -52,7 +52,10 @@ class TaskPresenter:
 
         text_msg = await message.answer(f"Прослухай і прочитай:\n{item.text}", reply_markup=reply_markup)
 
+        if image_path:
+            await text_msg.answer_photo(FSInputFile(str(image_path)))
+
         if audio_path:
-            await text_msg.answer_voice(FSInputFile(audio_path))
+            await text_msg.answer_voice(FSInputFile(str(audio_path)))
         else:
             await text_msg.answer("Аудіо тимчасово недоступне.")
