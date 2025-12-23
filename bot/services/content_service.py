@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional
 
+from bot.paths import project_path, resolve_project_path
+
 
 @dataclass
 class ContentItem:
@@ -26,8 +28,8 @@ class PetAsset:
 
 class ContentService:
     def __init__(self, levels_dir: Path, assets_dir: Path | None = None):
-        self.levels_dir = Path(levels_dir)
-        self.assets_dir = Path(assets_dir) if assets_dir else Path("assets/pets/cat")
+        self.levels_dir = resolve_project_path(levels_dir)
+        self.assets_dir = resolve_project_path(assets_dir) if assets_dir else project_path("assets/pets/cat")
 
     def _level_path(self, level: int) -> Path:
         return self.levels_dir / f"level{level}.csv"
@@ -95,7 +97,7 @@ class ContentService:
             return []
 
         # Optional persisted list of passed items (local file fallback if DB not available).
-        progress_path = Path("data/content_progress.json")
+        progress_path = project_path("data/content_progress.json")
         if passed_ids is None:
             passed_ids = self._load_progress_map(user_id, level, progress_path)
 

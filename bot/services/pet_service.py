@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from bot.storage.repositories import PetRepository
+from bot.paths import resolve_project_path
 
 
 PET_TYPES = ("panda", "dog", "dinosaur", "fox", "cat")
@@ -50,7 +51,7 @@ class PetService:
 
     def __init__(self, repo: PetRepository, assets_root: Path, timezone_name: str = "Europe/Kyiv") -> None:
         self.repo = repo
-        self.assets_root = assets_root
+        self.assets_root = resolve_project_path(assets_root)
         self.tz = ZoneInfo(timezone_name)
 
     async def ensure_pet(self, user_id: int, default_pet: str = "panda") -> None:
