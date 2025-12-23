@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import hashlib
 import logging
 from pathlib import Path
-
-import edge_tts
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +24,14 @@ class TTSService:
         self.voice = voice
         self.rate = rate
 
+    def _load_backend(self):
+        spec = importlib.util.find_spec("edge_tts")
+        if spec is None:
+            raise TTSUnavailableError("edge_tts backend is not installed")
+        import edge_tts  # type: ignore
+
+        return edge_tts
+
     def _hash_text(self, text: str) -> str:
         normalized = " ".join(text.split()).strip().lower()
         return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
@@ -38,6 +45,7 @@ class TTSService:
         if path.exists():
             return path
 
+        edge_tts = self._load_backend()
         communicate = edge_tts.Communicate(text, voice=self.voice, rate=self.rate)
         try:
             with open(path, "wb") as output:

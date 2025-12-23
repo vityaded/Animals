@@ -46,7 +46,6 @@ async def main() -> None:
         repo=repositories.pets,
         assets_root=Path("assets/pets"),
         timezone_name=str(config.timezone),
-        session_times=config.session_times,
     )
 
     ctx = AppContext(
