@@ -4,6 +4,7 @@ import json
 
 from aiogram import F, Router, types
 from aiogram.filters import Command, CommandObject
+from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
@@ -52,12 +53,24 @@ async def start_or_continue(
     if state:
         if state.mode == "normal" and state.awaiting_care:
             options = ["feed", "water", "play"]
+            need_state = None
             if state.care_json:
                 try:
                     data = json.loads(state.care_json)
                     options = data.get("options", options)
+                    need_state = data.get("need_state")
                 except Exception:
                     options = options
+            if need_state:
+                pet = await ctx.pet_service.rollover_if_needed(user["id"])
+                img = ctx.pet_service.asset_path(pet.pet_type, need_state)
+                if img and img.exists():
+                    await message.answer_photo(
+                        FSInputFile(str(img)),
+                        caption="Подбай про тваринку:",
+                        reply_markup=care_inline_kb(options),
+                    )
+                    return
             await message.answer("Подбай про тваринку:", reply_markup=care_inline_kb(options))
             return
         await _send_current_task(ctx, message, state)
