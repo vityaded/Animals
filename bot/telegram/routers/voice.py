@@ -11,7 +11,7 @@ from aiogram.filters import Command
 from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
-from bot.telegram.keyboards import BTN_CARE, care_inline_kb, repeat_inline_kb
+from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,13 @@ def setup_voice_router(ctx: AppContext) -> Router:
         user = await ctx.repositories.users.get_user(message.from_user.id)
         if not user:
             await message.answer("Спочатку надішліть /start")
+            return None, None
+        pet_row = await ctx.repositories.pets.load_pet(user["id"])
+        if pet_row is None:
+            await message.answer(
+                "Спочатку обери тваринку:",
+                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+            )
             return None, None
         state = await ctx.session_service.get_active_session(user["id"])
         return user, state
@@ -44,7 +51,6 @@ def setup_voice_router(ctx: AppContext) -> Router:
         await message.answer("Сесію завершено.")
 
     async def _ensure_pet(user_id: int):
-        await ctx.pet_service.ensure_pet(user_id)
         return await ctx.pet_service.rollover_if_needed(user_id)
 
     async def _finalize_session(message: types.Message, state, wrong_total: int) -> None:

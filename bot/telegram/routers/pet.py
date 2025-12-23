@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from aiogram import F, Router, types
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command
 from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_PET, choose_pet_inline_kb
+from bot.telegram.routers.session import start_or_continue
 
 
 def setup_pet_router(ctx: AppContext) -> Router:
@@ -26,26 +27,32 @@ def setup_pet_router(ctx: AppContext) -> Router:
             await msg.answer(text)
 
     @router.message(Command("choosepet"))
-    async def cmd_choosepet(message: types.Message, command: CommandObject | None = None) -> None:
+    async def cmd_choosepet(message: types.Message) -> None:
         user = await _ensure_user(message)
         if not user:
             await message.answer("Спочатку /start")
             return
-        await ctx.pet_service.ensure_pet(user["id"])
-        await message.answer("Обери тваринку:", reply_markup=choose_pet_inline_kb())
+        await message.answer(
+            "Обери тваринку:",
+            reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+        )
 
-    @router.callback_query(F.data.startswith("pet_choose:"))
+    @router.callback_query(lambda c: c.data and (c.data.startswith("pick_pet:") or c.data.startswith("pet_choose:")))
     async def on_choose(callback: types.CallbackQuery) -> None:
         user = await ctx.repositories.users.get_user(callback.from_user.id)
         if not user:
             await callback.answer("/start", show_alert=True)
             return
         _, pet_type = callback.data.split(":", 1)
+        previous_pet = await ctx.repositories.pets.load_pet(user["id"])
         await ctx.pet_service.ensure_pet(user["id"])
         await ctx.pet_service.choose_pet(user["id"], pet_type)
-        await callback.message.answer(f"✅ Обрано: {pet_type}")
-        await _send_pet_card(callback, user["id"])
         await callback.answer()
+        await callback.message.answer(f"✅ Обрано: {pet_type}")
+        if previous_pet is None:
+            await start_or_continue(ctx, callback.message, level=None, user_id=user["telegram_id"])
+        else:
+            await _send_pet_card(callback, user["id"])
 
     @router.message(Command("pet"))
     async def cmd_pet(message: types.Message) -> None:
@@ -53,7 +60,13 @@ def setup_pet_router(ctx: AppContext) -> Router:
         if not user:
             await message.answer("Спочатку /start")
             return
-        await ctx.pet_service.ensure_pet(user["id"])
+        pet_row = await ctx.repositories.pets.load_pet(user["id"])
+        if pet_row is None:
+            await message.answer(
+                "Спочатку обери тваринку:",
+                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+            )
+            return
         await _send_pet_card(message, user["id"])
 
     @router.message(F.text == BTN_PET)
@@ -62,7 +75,13 @@ def setup_pet_router(ctx: AppContext) -> Router:
         if not user:
             await message.answer("Спочатку /start")
             return
-        await ctx.pet_service.ensure_pet(user["id"])
+        pet_row = await ctx.repositories.pets.load_pet(user["id"])
+        if pet_row is None:
+            await message.answer(
+                "Спочатку обери тваринку:",
+                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+            )
+            return
         await _send_pet_card(message, user["id"])
 
     return router

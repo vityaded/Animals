@@ -14,18 +14,23 @@ def main_menu_kb() -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 
-def choose_pet_inline_kb() -> types.InlineKeyboardMarkup:
-    keyboard = [
-        [
-            types.InlineKeyboardButton(text="Panda 🐼", callback_data="pet_choose:panda"),
-            types.InlineKeyboardButton(text="Dog 🐶", callback_data="pet_choose:dog"),
-        ],
-        [
-            types.InlineKeyboardButton(text="Dinosaur 🦖", callback_data="pet_choose:dinosaur"),
-            types.InlineKeyboardButton(text="Fox 🦊", callback_data="pet_choose:fox"),
-        ],
+PET_LABELS = {
+    "panda": "Панда 🐼",
+    "dog": "Песик 🐶",
+    "dinosaur": "Динозавр 🦖",
+    "fox": "Лисичка 🦊",
+    "cat": "Котик 🐱",
+}
+
+
+def choose_pet_inline_kb(pet_types: list[str]) -> types.InlineKeyboardMarkup:
+    buttons = [
+        types.InlineKeyboardButton(text=PET_LABELS.get(p, p.capitalize()), callback_data=f"pick_pet:{p}") for p in pet_types
     ]
-    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    rows: list[list[types.InlineKeyboardButton]] = []
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i : i + 2])
+    return types.InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def session_inline_kb() -> types.InlineKeyboardMarkup:

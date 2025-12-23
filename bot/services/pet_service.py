@@ -56,6 +56,19 @@ class PetService:
     async def ensure_pet(self, user_id: int, default_pet: str = "panda") -> None:
         await self.repo.ensure_pet(user_id, pet_type=default_pet)
 
+    def available_pet_types(self) -> list[str]:
+        if self.assets_root.exists():
+            found = [p.name for p in self.assets_root.iterdir() if p.is_dir()]
+        else:
+            found = []
+        if not found:
+            return []
+        ordered = [p for p in PET_TYPES if p in found]
+        for pet in found:
+            if pet not in ordered:
+                ordered.append(pet)
+        return ordered or found
+
     async def choose_pet(self, user_id: int, pet_type: str) -> None:
         if pet_type not in PET_TYPES:
             pet_type = "panda"

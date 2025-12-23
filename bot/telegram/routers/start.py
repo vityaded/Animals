@@ -15,10 +15,13 @@ def setup_start_router(ctx: AppContext) -> Router:
         user_id = await ctx.repositories.users.upsert_user(message.from_user.id, message.from_user.username)
         await ctx.repositories.user_settings.ensure_settings(user_id, timezone=ctx.timezone)
         existing_pet = await ctx.repositories.pets.load_pet(user_id)
-        await ctx.pet_service.ensure_pet(user_id)
-        await ctx.pet_service.rollover_if_needed(user_id)
         if existing_pet is None:
-            await message.answer("Обери свою тваринку:", reply_markup=choose_pet_inline_kb())
+            await message.answer(
+                "Обери свою тваринку:",
+                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+            )
+            return
+        await ctx.pet_service.rollover_if_needed(user_id)
         await message.answer(
             "Привіт! Ми читаємо разом, щоб піклуватися про тваринку.\n"
             "Натисни «Піклуватися», щоб почати читання.\n"
@@ -41,5 +44,13 @@ def setup_start_router(ctx: AppContext) -> Router:
         else:
             token = await ctx.health_service.generate_revive(user["id"])
             await message.answer(f"Токен на відновлення: {token}")
+
+    @router.message(Command("reset_all"))
+    async def cmd_reset_all(message: types.Message) -> None:
+        if message.from_user.id not in ctx.admin_ids:
+            await message.answer("Not allowed.")
+            return
+        await ctx.repositories.reset_all()
+        await message.answer("DB cleared. Надішліть /start щоб почати заново.")
 
     return router

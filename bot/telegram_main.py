@@ -59,6 +59,7 @@ async def main() -> None:
         tts_service=tts_service,
         task_presenter=task_presenter,
         timezone=str(config.timezone),
+        admin_ids=config.admin_telegram_ids,
     )
 
     bot = Bot(token=config.telegram_token)
