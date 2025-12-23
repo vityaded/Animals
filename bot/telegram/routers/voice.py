@@ -19,8 +19,12 @@ logger = logging.getLogger(__name__)
 def setup_voice_router(ctx: AppContext) -> Router:
     router = Router()
 
-    async def _load_active(message: types.Message):
-        user = await ctx.repositories.users.get_user(message.from_user.id)
+    async def _load_active(message: types.Message, telegram_id: int | None = None):
+        # IMPORTANT:
+        # - For normal messages: message.from_user.id is the user.
+        # - For callback.message (bot's own message): message.from_user.id is the bot -> WRONG.
+        uid = telegram_id if telegram_id is not None else message.from_user.id
+        user = await ctx.repositories.users.get_user(uid)
         if not user:
             await message.answer("Спочатку надішліть /start")
             return None, None
@@ -223,7 +227,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
 
     @router.callback_query(F.data == "repeat:current")
     async def on_repeat(callback: types.CallbackQuery) -> None:
-        user, state = await _load_active(callback.message)
+        user, state = await _load_active(callback.message, telegram_id=callback.from_user.id)
         if not user or not state:
             await callback.answer()
             return
@@ -232,7 +236,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
 
     @router.callback_query(F.data.startswith("care:"))
     async def on_care(callback: types.CallbackQuery) -> None:
-        user, state = await _load_active(callback.message)
+        user, state = await _load_active(callback.message, telegram_id=callback.from_user.id)
         if not user or not state:
             await callback.answer()
             return
