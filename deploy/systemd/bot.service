@@ -1,0 +1,15 @@
+[Unit]
+Description=Animals Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/workspace/Animals
+EnvironmentFile=/workspace/Animals/.env
+ExecStart=/usr/bin/python -m bot.telegram_main
+Restart=on-failure
+User=bot
+Group=bot
+
+[Install]
+WantedBy=multi-user.target

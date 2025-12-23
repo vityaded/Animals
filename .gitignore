@@ -1,0 +1,80 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+.eggs/
+*.egg-info/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Environment files (keep example)
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Databases
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+
+# =========================
+# Logs / runtime artifacts
+# =========================
+*.log
+logs/
+tmp/
+.cache/
+
+# Audio artifacts (if you generate/convert voice locally)
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.opus
+
+# =========================
+# OS / IDE
+# =========================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# =========================
+# Binary assets (keep placeholders in repo)
+# =========================
+assets/**/*.[Pp][Nn][Gg]
+assets/**/*.[Jj][Pp][Gg]
+assets/**/*.[Jj][Pp][Ee][Gg]
+assets/**/*.[Ww][Ee][Bb][Pp]
+
+# Optional: generated helper file (remove this line if you want it tracked)
+assets/pets/_progress.json
+
+# Keep placeholder “files” tracked
+!assets/**/*.png.placeholder
+!assets/**/*.jpg.placeholder
+!assets/**/*.jpeg.placeholder
+!assets/**/*.webp.placeholder

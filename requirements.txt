@@ -1,0 +1,7 @@
+aiogram>=3
+python-dotenv
+faster-whisper
+rapidfuzz
+aiosqlite
+pytest
+pytest-asyncio
