@@ -78,19 +78,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int:
     args = parse_args()
     config = get_config()
     setup_logging(config.log_level)
     Path("var").mkdir(parents=True, exist_ok=True)
     if args.init_db:
         asyncio.run(init_db(config.db_path, "bot/db/schema.sql"))
-        return
+        return 0
     if args.smoke:
         asyncio.run(smoke())
-        return
+        return 0
     asyncio.run(run_bot())
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

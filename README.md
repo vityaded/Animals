@@ -40,8 +40,24 @@ Run the bot:
 python -m bot.main
 ```
 
+Legacy entrypoint still works:
+
+```bash
+python -m bot.telegram_main
+```
+
 Optional self-check:
 
 ```bash
 python tests/self_check.py
+```
+
+## Deployment
+
+After updating the systemd unit:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart animals_reading
+sudo systemctl status animals_reading --no-pager
 ```
