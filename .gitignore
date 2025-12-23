@@ -46,6 +46,7 @@ tmp/
 .cache/
 data/tts_cache/
 data/content_progress.json
+var/
 
 # Audio artifacts (if you generate/convert voice locally)
 *.wav
