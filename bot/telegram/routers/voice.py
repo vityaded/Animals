@@ -8,6 +8,7 @@ from io import BytesIO
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
+from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
@@ -76,7 +77,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
             "health": "heal",
         }.get(need_key, "feed")
 
-    async def _schedule_care(user_id: int, state) -> tuple[list[str], str]:
+    async def _schedule_care(user_id: int, state) -> tuple[list[str], str, str]:
         pet = await ctx.pet_service.rollover_if_needed(user_id)
         levels = {
             "hunger": pet.hunger_level,
@@ -107,11 +108,12 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 if len(choices) >= 3:
                     break
         random.shuffle(choices)
-        care_json = {"active_need": active_need, "options": choices}
+        need_state = f"{active_need}_{levels[active_need]}"
+        care_json = {"active_need": active_need, "need_state": need_state, "options": choices}
         await ctx.repositories.session_state.set_care_state(
             state.session_id, awaiting_care=1, care_stage=state.care_stage + 1, care_json=json.dumps(care_json)
         )
-        return choices, active_need
+        return choices, active_need, need_state
 
     @router.message(F.voice)
     async def handle_voice(message: types.Message) -> None:
@@ -186,8 +188,19 @@ def setup_voice_router(ctx: AppContext) -> Router:
         processed = updated_state.item_index
 
         if updated_state.mode == "normal" and processed in (5, 10) and updated_state.care_stage < (1 if processed == 5 else 2):
-            options, _ = await _schedule_care(user["id"], updated_state)
-            await message.answer("Подбай про тваринку:", reply_markup=care_inline_kb(options))
+            options, _, need_state = await _schedule_care(user["id"], updated_state)
+
+            pet = await ctx.pet_service.rollover_if_needed(user["id"])
+            img = ctx.pet_service.asset_path(pet.pet_type, need_state)
+
+            if img and img.exists():
+                await message.answer_photo(
+                    FSInputFile(str(img)),
+                    caption="Подбай про тваринку:",
+                    reply_markup=care_inline_kb(options),
+                )
+            else:
+                await message.answer("Подбай про тваринку:", reply_markup=care_inline_kb(options))
             return
 
         if updated_state.item_index >= updated_state.total_items:

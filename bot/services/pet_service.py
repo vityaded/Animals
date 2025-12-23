@@ -183,11 +183,19 @@ class PetService:
             "mood": status.mood_level,
             "health": status.health_level,
         }
-        if action_key == active_need_key:
-            levels[action_key] = max(1, levels[action_key] - 2)
-        else:
-            if action_key in levels:
-                levels[action_key] = max(1, levels[action_key] - 1)
+        action_to_need = {
+            "feed": "hunger",
+            "water": "thirst",
+            "wash": "hygiene",
+            "sleep": "energy",
+            "play": "mood",
+            "heal": "health",
+        }
+        chosen_need = action_to_need.get(action_key, action_key)
+        if chosen_need == active_need_key:
+            levels[chosen_need] = max(1, levels[chosen_need] - 2)
+        elif chosen_need in levels:
+            levels[chosen_need] = max(1, levels[chosen_need] - 1)
 
         await self.repo.update_pet(
             user_id,
@@ -234,6 +242,8 @@ class PetService:
         if status.is_dead:
             return "health_3"
         need_key, level = self._worst_need(status)
+        if level <= 1:
+            return "happy"
         return f"{need_key}_{level}"
 
     def asset_path(self, pet_type: str, state: str) -> Optional[Path]:
