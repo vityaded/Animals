@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import json
 import logging
+import random
+from datetime import datetime, timezone
 from io import BytesIO
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
+from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
-from bot.telegram.keyboards import BTN_READ, care_actions_inline_kb
+from bot.telegram.keyboards import BTN_CARE, care_inline_kb, repeat_inline_kb
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +28,11 @@ def setup_voice_router(ctx: AppContext) -> Router:
         return user, state
 
     async def _send_task(message: types.Message, state) -> None:
-        item = await ctx.session_service.get_current_item(state.level, state.deck_ids, state.item_index)
+        deck_item = state.current_item()
+        if not deck_item:
+            await message.answer("Немає активної картки.")
+            return
+        item = await ctx.session_service.get_current_item(deck_item)
         await ctx.task_presenter.send_listen_and_read(message, item)
 
     @router.message(Command("stop"))
@@ -35,19 +43,87 @@ def setup_voice_router(ctx: AppContext) -> Router:
         await ctx.session_service.complete_session(state.session_id, user["id"], state.level, 0, state.total_items)
         await message.answer("Сесію завершено.")
 
+    async def _ensure_pet(user_id: int):
+        await ctx.pet_service.ensure_pet(user_id)
+        return await ctx.pet_service.rollover_if_needed(user_id)
+
+    async def _finalize_session(message: types.Message, state, wrong_total: int) -> None:
+        await ctx.session_service.finish_if_needed(state.session_id, state.user_id, state.level)
+        if state.mode == "normal":
+            await ctx.pet_service.increment_sessions_today(state.user_id)
+            if wrong_total <= 2:
+                pet = await ctx.pet_service.apply_bonus(state.user_id)
+                bonus_path = ctx.pet_service.asset_path(pet.pet_type, f"bonus_{random.randint(1,10)}")
+                if bonus_path and bonus_path.exists():
+                    await message.answer_photo(FSInputFile(bonus_path))
+            await message.answer("Готово!")
+        else:
+            await ctx.pet_service.revive(state.user_id)
+            await message.answer("✅ Відновлено!")
+
+    def _need_to_action(need_key: str) -> str:
+        return {
+            "hunger": "feed",
+            "thirst": "water",
+            "hygiene": "wash",
+            "energy": "sleep",
+            "mood": "play",
+            "health": "heal",
+        }.get(need_key, "feed")
+
+    async def _schedule_care(user_id: int, state) -> tuple[list[str], str]:
+        pet = await ctx.pet_service.rollover_if_needed(user_id)
+        levels = {
+            "hunger": pet.hunger_level,
+            "thirst": pet.thirst_level,
+            "hygiene": pet.hygiene_level,
+            "energy": pet.energy_level,
+            "mood": pet.mood_level,
+            "health": pet.health_level,
+        }
+        max_level = max(levels.values())
+        max_needs = [k for k, v in levels.items() if v == max_level]
+        active_need = random.choice(max_needs)
+        decoy_sources = [k for k, v in levels.items() if k != active_need and v > 1]
+        if len(decoy_sources) < 2:
+            decoy_sources = [k for k in levels.keys() if k != active_need]
+        random.shuffle(decoy_sources)
+        choices = [_need_to_action(active_need)]
+        for key in decoy_sources:
+            action = _need_to_action(key)
+            if action not in choices:
+                choices.append(action)
+            if len(choices) >= 3:
+                break
+        while len(choices) < 3:
+            for fallback in ["feed", "water", "wash", "sleep", "play", "heal"]:
+                if fallback not in choices:
+                    choices.append(fallback)
+                if len(choices) >= 3:
+                    break
+        random.shuffle(choices)
+        care_json = {"active_need": active_need, "options": choices}
+        await ctx.repositories.session_state.set_care_state(
+            state.session_id, awaiting_care=1, care_stage=state.care_stage + 1, care_json=json.dumps(care_json)
+        )
+        return choices, active_need
+
     @router.message(F.voice)
     async def handle_voice(message: types.Message) -> None:
         user, state = await _load_active(message)
         if not user:
             return
         if not state:
-            await message.answer(f"Натисни «{BTN_READ}».")
+            await message.answer(f"Натисни «{BTN_CARE}».")
             return
 
-        await ctx.pet_service.ensure_pet(user["id"])
-        pet = await ctx.pet_service.apply_decay(user["id"])
-        if pet.is_dead and state.mode != "resurrect":
-            await message.answer(f"Тваринка заснула. Натисни «{BTN_READ}» щоб оживити.")
+        pet = await _ensure_pet(user["id"])
+        if state.awaiting_care:
+            await message.answer("Спочатку обери дію для тваринки.")
+            return
+
+        if pet.is_dead and state.mode != "revival":
+            await message.answer(f"Тваринка померла. Натисни «{BTN_CARE}» щоб почати відновлення.")
             return
 
         file = await message.bot.get_file(message.voice.file_id)
@@ -55,13 +131,18 @@ def setup_voice_router(ctx: AppContext) -> Router:
         audio_bytes = file_bytes.getvalue()
 
         try:
-            item = await ctx.session_service.get_current_item(state.level, state.deck_ids, state.item_index)
+            deck_item = state.current_item()
+            if not deck_item:
+                await message.answer("Картки закінчилися.")
+                return
+            item = await ctx.session_service.get_current_item(deck_item)
         except Exception:
             await message.answer("Контент недоступний.")
             return
 
         transcript, score, ok = await ctx.speech_service.evaluate_async(audio_bytes, item.text)
         is_first_try = state.current_attempts == 0
+        await ctx.progress_service.update_after_attempt(user["id"], deck_item.level, ok, is_first_try)
 
         await ctx.session_service.record_attempt(
             session_id=state.session_id,
@@ -74,84 +155,87 @@ def setup_voice_router(ctx: AppContext) -> Router:
             is_correct=ok,
         )
 
-        if state.mode == "resurrect":
-            streak = await ctx.pet_service.resurrect_progress(user["id"], ok)
-            if ok:
-                await ctx.session_service.advance_item(state.session_id)
-                if streak >= 20:
-                    await ctx.pet_service.revive(user["id"])
-                    await ctx.session_service.complete_session(state.session_id, user["id"], state.level, 0, state.total_items)
-                    await message.answer("✅ Тваринка ожила!")
-                    pet2 = await ctx.pet_service.apply_decay(user["id"])
-                    state_key = ctx.pet_service.pick_state(pet2)
-                    path = ctx.pet_service.asset_path(pet2.pet_type, state_key)
-                    if path:
-                        from aiogram.types import FSInputFile
-                        from pathlib import Path
-
-                        if path.exists() and path.suffix.lower() in {".jpg", ".png"}:
-                            await message.answer_photo(FSInputFile(Path(path)))
-                    return
-                next_state = await ctx.session_service.get_active_session(user["id"])
-                if next_state:
-                    next_item = await ctx.session_service.get_current_item(
-                        next_state.level, next_state.deck_ids, next_state.item_index
-                    )
-                    await message.answer(f"✅ {streak}/20")
-                    await ctx.task_presenter.send_listen_and_read(message, next_item)
-                else:
-                    await message.answer(f"✅ {streak}/20")
-            else:
-                await ctx.repositories.session_state.update_attempts(state.session_id, state.current_attempts + 1)
-                await message.answer("Спробуй ще раз.")
-                await _send_task(message, state)
-            return
-
-        await ctx.progress_service.update_after_attempt(user["id"], state.level, ok, is_first_try)
+        now_utc = datetime.now(timezone.utc)
 
         if ok:
-            await ctx.pet_service.on_correct(user["id"])
-            await ctx.repositories.item_progress.mark_passed(user["id"], state.level, item.id)
-            new_correct = await ctx.repositories.session_state.increment_correct(state.session_id)
-            row = await ctx.repositories.session_state.get_state(state.session_id)
-            reward_stage = int(row["reward_stage"]) if row and "reward_stage" in row.keys() else 0
-            if new_correct >= 5 and reward_stage < 1:
-                await ctx.pet_service.add_action_token(user["id"])
-                await ctx.repositories.session_state.set_reward_stage(state.session_id, 1)
-                await message.answer("Обери, що зробити з тваринкою:", reply_markup=care_actions_inline_kb())
-            if new_correct >= 10 and reward_stage < 2:
-                await ctx.pet_service.add_action_token(user["id"])
-                await ctx.repositories.session_state.set_reward_stage(state.session_id, 2)
-                await message.answer("Ще одна дія для тваринки:", reply_markup=care_actions_inline_kb())
-
+            await ctx.repositories.item_progress.record_correct(user["id"], deck_item.level, deck_item.content_id, now_utc=now_utc)
+            await ctx.repositories.session_state.increment_correct(state.session_id)
             await ctx.session_service.advance_item(state.session_id)
-            finished = await ctx.session_service.finish_if_needed(state.session_id, user["id"], state.level)
-            if finished:
-                await ctx.pet_service.on_session_completed(user["id"])
-                await message.answer("Готово!")
-                pet2 = await ctx.pet_service.apply_decay(user["id"])
-                state_key = ctx.pet_service.pick_state(pet2)
-                path = ctx.pet_service.asset_path(pet2.pet_type, state_key)
-                if path:
-                    from aiogram.types import FSInputFile
-                    from pathlib import Path
-
-                    if path.exists() and path.suffix.lower() in {".jpg", ".png"}:
-                        await message.answer_photo(FSInputFile(Path(path)))
-            else:
-                next_state = await ctx.session_service.get_active_session(user["id"])
-                if next_state:
-                    next_item = await ctx.session_service.get_current_item(
-                        next_state.level, next_state.deck_ids, next_state.item_index
-                    )
-                    await message.answer("✅")
-                    await ctx.task_presenter.send_listen_and_read(message, next_item)
-                else:
-                    await message.answer("✅")
+            await message.answer("✅ Добре!")
         else:
-            await ctx.repositories.session_state.update_attempts(state.session_id, state.current_attempts + 1)
-            await ctx.pet_service.on_wrong(user["id"])
-            await message.answer("Спробуй ще раз.")
-            await _send_task(message, state)
+            await ctx.repositories.session_state.increment_wrong_total(state.session_id)
+            await ctx.repositories.item_progress.record_wrong(user["id"], deck_item.level, deck_item.content_id, now_utc=now_utc)
+            attempts = state.current_attempts + 1
+            if attempts >= 5:
+                await message.answer("Йдемо далі")
+                await ctx.session_service.advance_item(state.session_id)
+            else:
+                await ctx.repositories.session_state.update_attempts(state.session_id, attempts)
+                await message.answer("❌ Спробуй ще раз")
+                await _send_task(message, await ctx.session_service.get_active_session(user["id"]))
+                return
+
+        updated_state = await ctx.session_service.get_active_session(user["id"])
+        if not updated_state:
+            return
+        processed = updated_state.item_index
+
+        if updated_state.mode == "normal" and processed in (5, 10) and updated_state.care_stage < (1 if processed == 5 else 2):
+            options, _ = await _schedule_care(user["id"], updated_state)
+            await message.answer("Подбай про тваринку:", reply_markup=care_inline_kb(options))
+            return
+
+        if updated_state.item_index >= updated_state.total_items:
+            wrong_total = updated_state.wrong_total
+            await _finalize_session(message, updated_state, wrong_total)
+        else:
+            await _send_task(message, updated_state)
+
+    @router.callback_query(F.data == "repeat:current")
+    async def on_repeat(callback: types.CallbackQuery) -> None:
+        user, state = await _load_active(callback.message)
+        if not user or not state:
+            await callback.answer()
+            return
+        await _send_task(callback.message, state)
+        await callback.answer()
+
+    @router.callback_query(F.data.startswith("care:"))
+    async def on_care(callback: types.CallbackQuery) -> None:
+        user, state = await _load_active(callback.message)
+        if not user or not state:
+            await callback.answer()
+            return
+        if not state.care_json:
+            await callback.answer("Сесія недоступна", show_alert=True)
+            return
+        try:
+            care_data = json.loads(state.care_json)
+        except Exception:
+            care_data = {}
+        action = callback.data.split(":", 1)[1]
+        options = care_data.get("options", [])
+        active_need = care_data.get("active_need")
+        if action not in options:
+            await callback.answer("Використай кнопки нижче.", show_alert=True)
+            return
+
+        status = await ctx.pet_service.apply_care_choice(user["id"], action, active_need)
+        await ctx.repositories.session_state.set_care_state(state.session_id, awaiting_care=0, care_json=None)
+        image_key = ctx.pet_service.pick_state(status)
+        img = ctx.pet_service.asset_path(status.pet_type, image_key)
+        if img and img.exists():
+            await callback.message.answer_photo(FSInputFile(img), caption="Тваринка рада")
+        else:
+            await callback.message.answer("Тваринка рада")
+        updated_state = await ctx.session_service.get_active_session(user["id"])
+        if not updated_state:
+            await callback.answer()
+            return
+        if updated_state.item_index >= updated_state.total_items:
+            await _finalize_session(callback.message, updated_state, updated_state.wrong_total)
+        else:
+            await _send_task(callback.message, updated_state)
+        await callback.answer()
 
     return router

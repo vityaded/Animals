@@ -23,12 +23,13 @@ def setup_menu_router(ctx: AppContext) -> Router:
         streak = stats["streak"] if stats else 0
         hearts = await ctx.health_service.get_hearts(user["id"])
         await ctx.pet_service.ensure_pet(user["id"])
-        pet = await ctx.pet_service.apply_decay(user["id"])
+        pet = await ctx.pet_service.rollover_if_needed(user["id"])
+        worst_need = ctx.pet_service.pick_state(pet)
         await message.answer(
             "\n".join(progress_parts)
             + f"\nStreak today / Серія сьогодні: {streak}"
             + f"\nHearts / Серця: {hearts}"
-            + f"\nPet happiness / Щастя тваринки: {pet.happiness}/100"
+            + f"\nPet state / Стан тваринки: {worst_need}"
         )
 
     return router

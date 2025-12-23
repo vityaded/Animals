@@ -7,6 +7,7 @@ from aiogram.types import FSInputFile
 
 from bot.services.content_service import ContentItem
 from bot.services.tts_service import TTSService, TTSUnavailableError
+from bot.telegram.keyboards import repeat_inline_kb
 
 
 class TaskPresenter:
@@ -14,7 +15,7 @@ class TaskPresenter:
         self.assets_root = Path(assets_root)
         self.tts_service = tts_service
 
-    def _resolve_audio(self, item: ContentItem) -> Path:
+    async def _resolve_audio(self, item: ContentItem) -> Path:
         if item.sound:
             sound_path = Path(item.sound)
             if not sound_path.is_absolute():
@@ -24,7 +25,7 @@ class TaskPresenter:
                 sound_path = Path(item.sound)
             if sound_path.exists():
                 return sound_path
-        return self.tts_service.ensure_audio(item.text)
+        return await self.tts_service.ensure_voice(item.text)
 
     def _resolve_image(self, item: ContentItem) -> Path | None:
         if not item.image:
@@ -39,16 +40,16 @@ class TaskPresenter:
 
     async def send_listen_and_read(self, message: types.Message, item: ContentItem) -> None:
         try:
-            audio_path = self._resolve_audio(item)
+            audio_path = await self._resolve_audio(item)
         except TTSUnavailableError:
             audio_path = None
         image_path = self._resolve_image(item)
 
-        if image_path:
-            await message.answer_photo(FSInputFile(image_path))
+        text_msg = await message.answer(
+            f"Прослухай і прочитай.\n\n{item.text}", reply_markup=repeat_inline_kb()
+        )
 
         if audio_path:
-            await message.answer_audio(FSInputFile(audio_path))
+            await text_msg.answer_voice(FSInputFile(audio_path))
         else:
-            await message.answer("Аудіо тимчасово недоступне.")
-        await message.answer(f"Прослухай і прочитай:\n{item.text}")
+            await text_msg.answer("Аудіо тимчасово недоступне.")

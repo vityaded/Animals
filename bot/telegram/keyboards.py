@@ -4,13 +4,13 @@ from aiogram import types
 
 
 # Kid-friendly UI labels (Ukrainian)
-BTN_READ = "Прочитай"
+BTN_CARE = "Піклуватися"
 BTN_PET = "Моя тваринка"
 
 
 def main_menu_kb() -> types.ReplyKeyboardMarkup:
-    # Minimal keyboard for primary school.
-    keyboard = [[types.KeyboardButton(text=BTN_READ), types.KeyboardButton(text=BTN_PET)]]
+    # Minimal keyboard: start/continue care session or show pet.
+    keyboard = [[types.KeyboardButton(text=BTN_CARE), types.KeyboardButton(text=BTN_PET)]]
     return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 
@@ -34,18 +34,27 @@ def session_inline_kb() -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def care_actions_inline_kb() -> types.InlineKeyboardMarkup:
-    # Care actions unlocked after reading 5 units (then again after 10).
-    keyboard = [
-        [
-            types.InlineKeyboardButton(text="🍎 Нагодуй", callback_data="care:feed"),
-            types.InlineKeyboardButton(text="💧 Напоїй", callback_data="care:water"),
-            types.InlineKeyboardButton(text="🫧 Помий", callback_data="care:wash"),
-        ],
-        [
-            types.InlineKeyboardButton(text="🎾 Пограй", callback_data="care:play"),
-            types.InlineKeyboardButton(text="😴 Спати", callback_data="care:sleep"),
-            types.InlineKeyboardButton(text="🩹 Полікуй", callback_data="care:heal"),
-        ],
-    ]
+def repeat_inline_kb() -> types.InlineKeyboardMarkup:
+    keyboard = [[types.InlineKeyboardButton(text="🔁 Повторити", callback_data="repeat:current")]]
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+CARE_LABELS = {
+    "feed": "🍎 Нагодувати",
+    "water": "💧 Напоїти",
+    "wash": "🫧 Помити",
+    "sleep": "😴 Вкласти спати",
+    "play": "🎾 Пограти",
+    "heal": "🩹 Полікувати",
+}
+
+
+def care_inline_kb(options: list[str]) -> types.InlineKeyboardMarkup:
+    buttons = [
+        types.InlineKeyboardButton(text=CARE_LABELS.get(opt, opt), callback_data=f"care:{opt}") for opt in options
+    ]
+    # Arrange in two rows if needed
+    rows: list[list[types.InlineKeyboardButton]] = []
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i : i + 2])
+    return types.InlineKeyboardMarkup(inline_keyboard=rows)

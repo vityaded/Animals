@@ -35,6 +35,14 @@ class ContentService:
     def _asset_path(self, state: str) -> Path:
         return self.assets_dir / f"{state}.png"
 
+    def available_levels(self) -> list[int]:
+        levels: list[int] = []
+        for path in self.levels_dir.glob("level*.csv"):
+            name = path.stem.replace("level", "")
+            if name.isdigit():
+                levels.append(int(name))
+        return sorted(set(levels))
+
     def get_level_items(self, level: int) -> List[ContentItem]:
         path = self._level_path(level)
         if not path.exists():

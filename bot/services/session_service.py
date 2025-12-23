@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -10,11 +11,26 @@ from bot.storage.repositories import RepositoryProvider
 
 
 @dataclass
+class DeckItem:
+    level: int
+    content_id: str
+
+    @classmethod
+    def from_raw(cls, raw: object, default_level: int) -> "DeckItem":
+        if isinstance(raw, dict):
+            return cls(level=int(raw.get("level", default_level)), content_id=str(raw.get("content_id", "")))
+        return cls(level=default_level, content_id=str(raw))
+
+    def to_dict(self) -> dict:
+        return {"level": self.level, "content_id": self.content_id}
+
+
+@dataclass
 class SessionState:
     session_id: int
     user_id: int
     level: int
-    deck_ids: list[str]
+    deck: list[DeckItem]
     item_index: int
     total_items: int
     correct_count: int
@@ -22,21 +38,26 @@ class SessionState:
     mode: str
     blocked: bool
     current_attempts: int
+    wrong_total: int
+    care_stage: int
+    awaiting_care: int
+    care_json: Optional[str]
 
     @classmethod
     def from_row(cls, row) -> "SessionState":
         keys = set(row.keys()) if hasattr(row, "keys") else set()
-        deck_ids = []
+        deck: list[DeckItem] = []
         if "deck_json" in keys and row["deck_json"]:
             try:
-                deck_ids = json.loads(row["deck_json"])
+                raw_deck = json.loads(row["deck_json"])
+                deck = [DeckItem.from_raw(entry, row["level"]) for entry in raw_deck]
             except Exception:
-                deck_ids = []
+                deck = []
         return cls(
             session_id=row["session_id"],
             user_id=row["user_id"],
             level=row["level"],
-            deck_ids=deck_ids,
+            deck=deck,
             item_index=row["item_index"],
             total_items=row["total_items"],
             correct_count=row["correct_count"] if "correct_count" in keys else 0,
@@ -44,7 +65,19 @@ class SessionState:
             mode=row["mode"] if "mode" in keys else "normal",
             blocked=bool(row["blocked"]),
             current_attempts=row["current_attempts"] if "current_attempts" in keys else 0,
+            wrong_total=row["wrong_total"] if "wrong_total" in keys else 0,
+            care_stage=row["care_stage"] if "care_stage" in keys else 0,
+            awaiting_care=row["awaiting_care"] if "awaiting_care" in keys else 0,
+            care_json=row["care_json"] if "care_json" in keys else None,
         )
+
+    def deck_ids(self) -> list[str]:
+        return [item.content_id for item in self.deck]
+
+    def current_item(self) -> DeckItem | None:
+        if 0 <= self.item_index < len(self.deck):
+            return self.deck[self.item_index]
+        return None
 
 
 class SessionService:
@@ -52,51 +85,52 @@ class SessionService:
         self.repositories = repositories
         self.content_service = content_service
 
-    async def start_session(self, user_id: int, level: int, deadline_minutes: int) -> int:
+    async def start_session(self, user_id: int, level: int, deadline_minutes: int, total_items: int = 10) -> int:
         due_at = datetime.now(timezone.utc) + timedelta(minutes=deadline_minutes)
         session_id = await self.repositories.sessions.create_session(user_id, level, due_at)
         await self.repositories.sessions.update_status(session_id, "active")
-        progress = await self.repositories.progress.load_progress(user_id, level)
-        if progress == 0:
-            await self.repositories.progress.save_progress(user_id, level, progress)
-        passed_ids = await self.repositories.item_progress.list_passed(user_id, level)
-        deck_ids = self.content_service.build_deck(user_id, level, size=10, passed_ids=passed_ids)
-        total_items = len(deck_ids)
+        deck = await self.build_deck(user_id, level, total_items)
         await self.repositories.session_state.create_state(
             session_id=session_id,
             user_id=user_id,
             level=level,
-            deck_json=json.dumps(deck_ids, ensure_ascii=False),
-            total_items=total_items,
+            deck_json=json.dumps([item.to_dict() for item in deck], ensure_ascii=False),
+            total_items=len(deck),
             item_index=0,
             blocked=0,
             correct_count=0,
             reward_stage=0,
             mode="normal",
             current_attempts=0,
+            wrong_total=0,
+            care_stage=0,
+            awaiting_care=0,
+            care_json=None,
         )
         return session_id
 
-    async def start_resurrection(self, user_id: int, level: int = 1, deadline_minutes: int = 180) -> int:
-        """Start a special session where the user must get 20 correct answers in a row to revive a dead pet."""
+    async def start_revival(self, user_id: int, level: int = 1, deadline_minutes: int = 180) -> int:
+        """Start a special session where the user processes 20 cards to revive a dead pet."""
         due_at = datetime.now(timezone.utc) + timedelta(minutes=deadline_minutes)
         session_id = await self.repositories.sessions.create_session(user_id, level, due_at)
         await self.repositories.sessions.update_status(session_id, "active")
-        # A long-running session; we cycle tasks until the pet is revived.
-        total_items = 1_000_000
-        deck_ids = [item.id for item in self.content_service.list_items(level)]
+        deck = await self.build_deck(user_id, level, total_items=20)
         await self.repositories.session_state.create_state(
             session_id=session_id,
             user_id=user_id,
             level=level,
-            deck_json=json.dumps(deck_ids, ensure_ascii=False),
-            total_items=total_items,
+            deck_json=json.dumps([item.to_dict() for item in deck], ensure_ascii=False),
+            total_items=len(deck),
             item_index=0,
             blocked=0,
             correct_count=0,
             reward_stage=0,
-            mode="resurrect",
+            mode="revival",
             current_attempts=0,
+            wrong_total=0,
+            care_stage=0,
+            awaiting_care=0,
+            care_json=None,
         )
         return session_id
 
@@ -104,14 +138,8 @@ class SessionService:
         row = await self.repositories.session_state.get_active_state_for_user(user_id)
         return SessionState.from_row(row) if row else None
 
-    async def get_current_item(self, level: int, deck_ids: list[str], item_index: int) -> ContentItem:
-        if not deck_ids:
-            items = self.content_service.list_items(level)
-            if not items:
-                raise IndexError("No items for this level")
-            return items[item_index % len(items)]
-        content_id = deck_ids[item_index % len(deck_ids)]
-        return self.content_service.get_item(level, content_id)
+    async def get_current_item(self, deck_item: DeckItem) -> ContentItem:
+        return self.content_service.get_item(deck_item.level, deck_item.content_id)
 
     async def advance_item(self, session_id: int) -> None:
         state_row = await self.repositories.session_state.get_state(session_id)
@@ -181,3 +209,108 @@ class SessionService:
 
     async def get_items_for_level(self, level: int) -> list[ContentItem]:
         return self.content_service.get_level_items(level)
+
+    async def build_deck(self, user_id: int, current_level: int, total_items: int) -> list[DeckItem]:
+        now = datetime.now(timezone.utc)
+        progress_rows = await self.repositories.item_progress.list_all(user_id)
+
+        def parse_ts(value: object | None) -> Optional[datetime]:
+            if value is None:
+                return None
+            if isinstance(value, datetime):
+                return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+            try:
+                dt = datetime.fromisoformat(str(value).replace(" ", "T"))
+                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                return None
+
+        progress_map: dict[tuple[int, str], dict[str, object]] = {}
+        for row in progress_rows:
+            cols = set(row.keys()) if hasattr(row, "keys") else set()
+            progress_map[(int(row["level"]), row["content_id"])] = {
+                "learn_correct_count": row["learn_correct_count"] if "learn_correct_count" in cols else 0,
+                "review_stage": row["review_stage"] if "review_stage" in cols else 0,
+                "next_due_at": parse_ts(row["next_due_at"]) if "next_due_at" in cols else None,
+                "last_seen_at": parse_ts(row["last_seen_at"]) if "last_seen_at" in cols else None,
+            }
+
+        def is_finished(level: int, content_id: str) -> bool:
+            row = progress_map.get((level, content_id))
+            return bool(row and row.get("review_stage") == 3)
+
+        def due_items() -> list[DeckItem]:
+            due: list[DeckItem] = []
+            for (lvl, cid), meta in progress_map.items():
+                next_due = meta.get("next_due_at")
+                if next_due and next_due <= now:
+                    due.append(DeckItem(level=lvl, content_id=cid))
+            due.sort(
+                key=lambda x: progress_map.get((x.level, x.content_id), {}).get("next_due_at") or now,
+            )
+            return due
+
+        deck: list[DeckItem] = []
+        chosen: set[tuple[int, str]] = set()
+
+        # Step 1: due review items.
+        for item in due_items():
+            if len(deck) >= total_items:
+                break
+            if (item.level, item.content_id) in chosen:
+                continue
+            deck.append(item)
+            chosen.add((item.level, item.content_id))
+
+        def add_items(item_level: int, items: list[ContentItem]) -> None:
+            random.shuffle(items)
+            for itm in items:
+                if len(deck) >= total_items:
+                    break
+                key = (item_level, itm.id)
+                if key in chosen:
+                    continue
+                if is_finished(item_level, itm.id):
+                    continue
+                deck.append(DeckItem(level=item_level, content_id=itm.id))
+                chosen.add(key)
+
+        # Step 2: unfinished items from current level (respect mono/di gating for level 1).
+        try:
+            level_items = self.content_service.get_level_items(current_level)
+        except FileNotFoundError:
+            level_items = []
+        if current_level == 1:
+            mono_items = [i for i in level_items if (i.sublevel or "").lower() == "mono"]
+            di_items = [i for i in level_items if (i.sublevel or "").lower() == "di"]
+            unfinished_mono = [i for i in mono_items if not is_finished(1, i.id)]
+            if unfinished_mono:
+                add_items(1, unfinished_mono)
+            if len(deck) < total_items:
+                unfinished_di = [i for i in di_items if not is_finished(1, i.id)]
+                add_items(1, unfinished_di or di_items)
+        else:
+            unfinished = [i for i in level_items if not is_finished(current_level, i.id)]
+            add_items(current_level, unfinished or level_items)
+
+        # Step 3: any unfinished items from other levels.
+        for lvl in self.content_service.available_levels():
+            if len(deck) >= total_items or lvl == current_level:
+                continue
+            try:
+                items = self.content_service.get_level_items(lvl)
+            except FileNotFoundError:
+                continue
+            unfinished = [i for i in items if not is_finished(lvl, i.id)]
+            add_items(lvl, unfinished or items)
+
+        # If still not enough, allow repeats from current level pool.
+        if len(deck) < total_items and level_items:
+            idx = 0
+            pool = level_items
+            while len(deck) < total_items and pool:
+                itm = pool[idx % len(pool)]
+                deck.append(DeckItem(level=current_level, content_id=itm.id))
+                idx += 1
+
+        return deck[:total_items]

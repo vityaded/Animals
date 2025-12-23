@@ -5,3 +5,4 @@ rapidfuzz
 aiosqlite
 pytest
 pytest-asyncio
+edge-tts
