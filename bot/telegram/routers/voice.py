@@ -8,11 +8,10 @@ from io import BytesIO
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import FSInputFile
-
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
 from bot.telegram.media import answer_photo_safe
+from bot.telegram.media_utils import answer_photo_or_text
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +49,9 @@ def setup_voice_router(ctx: AppContext) -> Router:
             return
         await ctx.session_service.complete_session(state.session_id, user["id"], state.level, 0, state.total_items)
         await message.answer("Сесію завершено.")
+        pet_now = await ctx.pet_service.rollover_if_needed(user["id"])
+        img = ctx.pet_service.asset_path(pet_now.pet_type, ctx.pet_service.pick_state(pet_now))
+        await answer_photo_or_text(message, img, ctx.pet_service.status_text(pet_now))
 
     async def _ensure_pet(user_id: int):
         return await ctx.pet_service.rollover_if_needed(user_id)
@@ -62,10 +64,22 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 pet = await ctx.pet_service.apply_bonus(state.user_id)
                 bonus_path = ctx.pet_service.asset_path(pet.pet_type, f"bonus_{random.randint(1,10)}")
                 await answer_photo_safe(message, bonus_path if (bonus_path and bonus_path.exists()) else None)
-            await message.answer("Готово!")
+            pet_now = await ctx.pet_service.rollover_if_needed(state.user_id)
+            img = ctx.pet_service.asset_path(pet_now.pet_type, ctx.pet_service.pick_state(pet_now))
+            await answer_photo_or_text(
+                message,
+                img,
+                "✅ Готово!\n" + ctx.pet_service.status_text(pet_now),
+            )
         else:
             await ctx.pet_service.revive(state.user_id)
-            await message.answer("✅ Відновлено!")
+            pet_now = await ctx.pet_service.rollover_if_needed(state.user_id)
+            img = ctx.pet_service.asset_path(pet_now.pet_type, ctx.pet_service.pick_state(pet_now))
+            await answer_photo_or_text(
+                message,
+                img,
+                "✅ Відновлено!\n" + ctx.pet_service.status_text(pet_now),
+            )
 
     def _need_to_action(need_key: str) -> str:
         return {
@@ -193,14 +207,12 @@ def setup_voice_router(ctx: AppContext) -> Router:
             pet = await ctx.pet_service.rollover_if_needed(user["id"])
             img = ctx.pet_service.asset_path(pet.pet_type, need_state)
 
-            if img and img.exists():
-                await message.answer_photo(
-                    FSInputFile(str(img)),
-                    caption="Подбай про тваринку:",
-                    reply_markup=care_inline_kb(options),
-                )
-            else:
-                await message.answer("Подбай про тваринку:", reply_markup=care_inline_kb(options))
+            await answer_photo_or_text(
+                message,
+                img,
+                "Подбай про тваринку:",
+                reply_markup=care_inline_kb(options),
+            )
             return
 
         if updated_state.item_index >= updated_state.total_items:

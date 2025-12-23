@@ -4,10 +4,9 @@ import json
 
 from aiogram import F, Router, types
 from aiogram.filters import Command, CommandObject
-from aiogram.types import FSInputFile
-
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
+from bot.telegram.media_utils import answer_photo_or_text
 
 
 async def _send_current_task(ctx: AppContext, message: types.Message, state) -> None:
@@ -47,6 +46,9 @@ async def start_or_continue(
             state = await ctx.session_service.get_active_session(user["id"])
             await message.answer("Тваринка померла. Починаємо відновлення: 20 карток.")
         if state:
+            pet_now = await ctx.pet_service.rollover_if_needed(user["id"])
+            img = ctx.pet_service.asset_path(pet_now.pet_type, ctx.pet_service.pick_state(pet_now))
+            await answer_photo_or_text(message, img, ctx.pet_service.status_text(pet_now))
             await _send_current_task(ctx, message, state)
         return
 
@@ -60,18 +62,15 @@ async def start_or_continue(
                     options = data.get("options", options)
                     need_state = data.get("need_state")
                 except Exception:
-                    options = options
-            if need_state:
-                pet = await ctx.pet_service.rollover_if_needed(user["id"])
-                img = ctx.pet_service.asset_path(pet.pet_type, need_state)
-                if img and img.exists():
-                    await message.answer_photo(
-                        FSInputFile(str(img)),
-                        caption="Подбай про тваринку:",
-                        reply_markup=care_inline_kb(options),
-                    )
-                    return
-            await message.answer("Подбай про тваринку:", reply_markup=care_inline_kb(options))
+                    pass
+            pet = await ctx.pet_service.rollover_if_needed(user["id"])
+            img = ctx.pet_service.asset_path(pet.pet_type, need_state) if need_state else None
+            await answer_photo_or_text(
+                message,
+                img,
+                "Подбай про тваринку:",
+                reply_markup=care_inline_kb(options),
+            )
             return
         await _send_current_task(ctx, message, state)
         return
@@ -85,6 +84,11 @@ async def start_or_continue(
     if state.total_items == 0:
         await message.answer("Контент недоступний для цього рівня.")
         return
+    pet = await ctx.pet_service.rollover_if_needed(user["id"])
+    state_key = ctx.pet_service.pick_state(pet)
+    img = ctx.pet_service.asset_path(pet.pet_type, state_key)
+    caption = ctx.pet_service.status_text(pet)
+    await answer_photo_or_text(message, img, caption)
     await _send_current_task(ctx, message, state)
 
 

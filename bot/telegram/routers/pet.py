@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
+from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_PET, choose_pet_inline_kb
-from bot.telegram.media import answer_photo_safe
 from bot.telegram.routers.session import start_or_continue
 
 
@@ -21,7 +21,10 @@ def setup_pet_router(ctx: AppContext) -> Router:
         path = ctx.pet_service.asset_path(pet.pet_type, state_key)
         text = ctx.pet_service.status_text(pet)
         msg = chat.message if isinstance(chat, types.CallbackQuery) else chat
-        await answer_photo_safe(msg, path if (path and path.exists()) else None, caption=text)
+        if path and path.exists():
+            await msg.answer_photo(FSInputFile(str(path)), caption=text)
+        else:
+            await msg.answer(text)
 
     @router.message(Command("debug_pet_assets"))
     async def cmd_debug_pet_assets(message: types.Message) -> None:
@@ -73,7 +76,6 @@ def setup_pet_router(ctx: AppContext) -> Router:
             await callback.answer("/start", show_alert=True)
             return
         _, pet_type = callback.data.split(":", 1)
-        previous_pet = await ctx.repositories.pets.load_pet(user["id"])
         await ctx.pet_service.ensure_pet(user["id"])
         await ctx.pet_service.choose_pet(user["id"], pet_type)
         await callback.answer()
