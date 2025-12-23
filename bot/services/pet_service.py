@@ -12,6 +12,8 @@ from bot.paths import resolve_project_path
 
 
 PET_TYPES = ("panda", "dog", "dinosaur", "fox", "cat")
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+PLACEHOLDER_SUFFIX = ".placeholder"
 
 
 @dataclass
@@ -57,9 +59,20 @@ class PetService:
     async def ensure_pet(self, user_id: int, default_pet: str = "panda") -> None:
         await self.repo.ensure_pet(user_id, pet_type=default_pet)
 
+    def _has_real_images(self, pet_dir: Path) -> bool:
+        if not pet_dir.is_dir():
+            return False
+        for entry in pet_dir.iterdir():
+            name = entry.name.lower()
+            if name.endswith(PLACEHOLDER_SUFFIX):
+                continue
+            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTS:
+                return True
+        return False
+
     def available_pet_types(self) -> list[str]:
         if self.assets_root.exists():
-            found = [p.name for p in self.assets_root.iterdir() if p.is_dir()]
+            found = [p.name for p in self.assets_root.iterdir() if p.is_dir() and self._has_real_images(p)]
         else:
             found = []
         if not found:
@@ -222,20 +235,31 @@ class PetService:
         need_key, level = self._worst_need(status)
         return f"{need_key}_{level}"
 
+    def _find_image(self, pet_dir: Path, stem: str) -> Optional[Path]:
+        for ext in IMAGE_EXTS:
+            candidate = pet_dir / f"{stem}{ext}"
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        for entry in pet_dir.iterdir():
+            if not entry.is_file():
+                continue
+            name = entry.name.lower()
+            if name.endswith(PLACEHOLDER_SUFFIX):
+                continue
+            if entry.suffix.lower() in IMAGE_EXTS and entry.stem.lower() == stem.lower():
+                return entry
+        return None
+
     def asset_path(self, pet_type: str, state: str) -> Optional[Path]:
         pet_dir = self.assets_root / pet_type
-        for ext in ("jpg", "png"):
-            p = pet_dir / f"{state}.{ext}"
-            if p.exists():
-                return p
-        p = pet_dir / f"{state}.png.placeholder"
-        if p.exists():
-            return p
-        for ext in ("jpg", "png"):
-            p = pet_dir / f"happy.{ext}"
-            if p.exists():
-                return p
-        return None
+        if not pet_dir.exists():
+            return None
+
+        path = self._find_image(pet_dir, state)
+        if path:
+            return path
+
+        return self._find_image(pet_dir, "happy")
 
     def status_text(self, status: PetStatus) -> str:
         if status.is_dead:

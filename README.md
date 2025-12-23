@@ -40,6 +40,7 @@ pytest
 ```
 TELEGRAM_TOKEN=your-telegram-token
 DATABASE_PATH=bot.sqlite
+PETS_ASSETS_ROOT=assets/pets
 WHISPER_MODEL=base
 SESSION_TIMES=09:00,18:00
 REMINDER_MINUTES_BEFORE=30
@@ -65,13 +66,14 @@ python -m bot.telegram_main
 
 ## Структура контенту
 - Рівні: `content/levels/level1.csv`, `level2.csv`, `level3.csv`
-- Графіка улюбленця використовує плейсхолдери `assets/pets/cat/<state>.png.placeholder` (happy, sad, sleep). Реальні PNG не зберігаються в репозиторії.
+- Графіка улюбленця знаходиться у `assets/pets/<pet_type>/`. Для кожного стейту використовуйте реальні зображення (`.jpg`, `.jpeg`, `.png`, `.webp`). Плейсхолдери `*.placeholder` ігноруються та не пропонують таких тварин у виборі.
 
 Щоб замінити плейсхолдери на справжні зображення (наприклад, 512x512):
 
 1. Покладіть файли `happy.png`, `sad.png`, `sleep.png` у `assets/pets/cat/`.
 2. Видаліть або перейменуйте відповідні `.png.placeholder` файли, якщо вони більше не потрібні.
 3. Уникайте додавання двійкових PNG у pull request; додайте їх локально під час деплою.
+4. Якщо зображення лежать в іншій директорії на сервері, вкажіть шлях у `.env` через `PETS_ASSETS_ROOT=/abs/path/to/pets`.
 
 ## Сервіс systemd (рекомендовано)
 Файл `deploy/systemd/bot.service` містить базовий юніт. Розташуйте його у `/etc/systemd/system` та відредагуйте шляхи й користувача.
@@ -80,3 +82,6 @@ python -m bot.telegram_main
 sudo systemctl daemon-reload
 sudo systemctl enable --now bot.service
 ```
+
+## Діагностика зображень
+Команда `/debug_pet_assets` (доступна адміністраторам з `ADMIN_TELEGRAM_IDS`) показує, яку директорію з активами бачить бот, який обраний тип тваринки та який файл використовується для поточного стану.

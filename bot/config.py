@@ -16,6 +16,7 @@ automatically_loaded = load_dotenv()
 class Config:
     telegram_token: str
     db_path: Path
+    pets_assets_root: Path
     whisper_model: str
     session_times: List[str]
     reminder_minutes_before: int
@@ -27,6 +28,7 @@ class Config:
     def from_env(cls) -> "Config":
         telegram_token = os.getenv("TELEGRAM_TOKEN", "")
         db_path = Path(os.getenv("DATABASE_PATH", "bot.sqlite"))
+        pets_assets_root = Path(os.getenv("PETS_ASSETS_ROOT", "assets/pets"))
         whisper_model = os.getenv("WHISPER_MODEL", "base")
         session_times = [time.strip() for time in os.getenv("SESSION_TIMES", "09:00,18:00").split(",") if time.strip()]
         reminder_minutes_before = int(os.getenv("REMINDER_MINUTES_BEFORE", "30"))
@@ -45,6 +47,7 @@ class Config:
         return cls(
             telegram_token=telegram_token,
             db_path=db_path,
+            pets_assets_root=pets_assets_root,
             whisper_model=whisper_model,
             session_times=session_times,
             reminder_minutes_before=reminder_minutes_before,

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_PET, choose_pet_inline_kb
+from bot.telegram.media import answer_photo_safe
 from bot.telegram.routers.session import start_or_continue
 
 
@@ -21,10 +21,39 @@ def setup_pet_router(ctx: AppContext) -> Router:
         path = ctx.pet_service.asset_path(pet.pet_type, state_key)
         text = ctx.pet_service.status_text(pet)
         msg = chat.message if isinstance(chat, types.CallbackQuery) else chat
-        if path and path.exists():
-            await msg.answer_photo(FSInputFile(path), caption=text)
-        else:
-            await msg.answer(text)
+        await answer_photo_safe(msg, path if (path and path.exists()) else None, caption=text)
+
+    @router.message(Command("debug_pet_assets"))
+    async def cmd_debug_pet_assets(message: types.Message) -> None:
+        if ctx.admin_ids and message.from_user.id not in ctx.admin_ids:
+            await message.answer("Недоступно.")
+            return
+        user = await _ensure_user(message)
+        if not user:
+            await message.answer("Спочатку /start")
+            return
+        pet = await ctx.pet_service.rollover_if_needed(user["id"])
+        state_key = ctx.pet_service.pick_state(pet)
+        path = ctx.pet_service.asset_path(pet.pet_type, state_key)
+        exists = path.exists() if path else False
+        size = None
+        if exists:
+            try:
+                size = path.stat().st_size
+            except Exception:
+                size = None
+        await message.answer(
+            "\n".join(
+                [
+                    f"Assets root: {ctx.pet_service.assets_root}",
+                    f"Pet: {pet.pet_type}",
+                    f"State: {state_key}",
+                    f"Path: {path if path else 'none'}",
+                    f"Exists: {exists}",
+                    f"Size: {size if size is not None else 'unknown'} bytes",
+                ]
+            )
+        )
 
     @router.message(Command("choosepet"))
     async def cmd_choosepet(message: types.Message) -> None:
