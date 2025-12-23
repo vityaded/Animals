@@ -103,6 +103,22 @@ class SessionRepository:
             )
             return await cursor.fetchall()
 
+    async def count_sessions_started_between(self, user_id: int, start_utc: datetime, end_utc: datetime) -> int:
+        """Count sessions whose started_at is within [start_utc, end_utc). started_at is stored in UTC."""
+        start_s = start_utc.strftime("%Y-%m-%d %H:%M:%S")
+        end_s = end_utc.strftime("%Y-%m-%d %H:%M:%S")
+        async with self.database.connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM sessions
+                WHERE user_id=? AND started_at >= ? AND started_at < ?
+                """,
+                (user_id, start_s, end_s),
+            )
+            row = await cursor.fetchone()
+            return int(row["cnt"]) if row and row["cnt"] is not None else 0
+
 
 class SessionStateRepository:
     def __init__(self, database: Database):

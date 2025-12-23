@@ -7,7 +7,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
-from bot.telegram.keyboards import choose_pet_inline_kb
+from bot.telegram.keyboards import BTN_PET, choose_pet_inline_kb
 
 
 def setup_pet_router(ctx: AppContext) -> Router:
@@ -35,13 +35,10 @@ def setup_pet_router(ctx: AppContext) -> Router:
     async def cmd_choosepet(message: types.Message, command: CommandObject | None = None) -> None:
         user = await _ensure_user(message)
         if not user:
-            await message.answer("Send /start first. / Спочатку /start")
+            await message.answer("Спочатку /start")
             return
         await ctx.pet_service.ensure_pet(user["id"])
-        await message.answer(
-            "Choose your animal / Обери тваринку:",
-            reply_markup=choose_pet_inline_kb(),
-        )
+        await message.answer("Обери тваринку:", reply_markup=choose_pet_inline_kb())
 
     @router.callback_query(F.data.startswith("pet_choose:"))
     async def on_choose(callback: types.CallbackQuery) -> None:
@@ -52,7 +49,7 @@ def setup_pet_router(ctx: AppContext) -> Router:
         _, pet_type = callback.data.split(":", 1)
         await ctx.pet_service.ensure_pet(user["id"])
         await ctx.pet_service.choose_pet(user["id"], pet_type)
-        await callback.message.answer(f"✅ Selected: {pet_type} / Обрано: {pet_type}")
+        await callback.message.answer(f"✅ Обрано: {pet_type}")
         await _send_pet_card(callback, user["id"])
         await callback.answer()
 
@@ -60,10 +57,36 @@ def setup_pet_router(ctx: AppContext) -> Router:
     async def cmd_pet(message: types.Message) -> None:
         user = await _ensure_user(message)
         if not user:
-            await message.answer("Send /start first. / Спочатку /start")
+            await message.answer("Спочатку /start")
             return
         await ctx.pet_service.ensure_pet(user["id"])
         await _send_pet_card(message, user["id"])
+
+    # Kid main button
+    @router.message(F.text == BTN_PET)
+    async def on_pet_button(message: types.Message) -> None:
+        user = await _ensure_user(message)
+        if not user:
+            await message.answer("Спочатку /start")
+            return
+        await ctx.pet_service.ensure_pet(user["id"])
+        await _send_pet_card(message, user["id"])
+
+    # Inline care actions (unlocked by reading)
+    @router.callback_query(F.data.startswith("care:"))
+    async def on_care_action(callback: types.CallbackQuery) -> None:
+        user = await ctx.repositories.users.get_user(callback.from_user.id)
+        if not user:
+            await callback.answer("/start", show_alert=True)
+            return
+        action = callback.data.split(":", 1)[1]
+        await ctx.pet_service.ensure_pet(user["id"])
+        ok, txt = await ctx.pet_service.perform_action(user["id"], action)
+        await callback.answer(txt if ok else txt, show_alert=not ok)
+        if ok:
+            await _send_pet_card(callback, user["id"])
+        else:
+            await callback.message.answer(txt)
 
     # Care actions
     @router.message(Command("feed"))

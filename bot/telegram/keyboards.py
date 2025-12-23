@@ -3,17 +3,15 @@ from __future__ import annotations
 from aiogram import types
 
 
+# Kid-friendly UI labels (Ukrainian)
+BTN_READ = "Прочитай"
+BTN_PET = "Моя тваринка"
+
+
 def main_menu_kb() -> types.ReplyKeyboardMarkup:
-    keyboard = [
-        [types.KeyboardButton(text="/menu"), types.KeyboardButton(text="/pet")],
-        [
-            types.KeyboardButton(text="/session 1"),
-            types.KeyboardButton(text="/session 2"),
-            types.KeyboardButton(text="/session 3"),
-        ],
-        [types.KeyboardButton(text="/choosepet")],
-    ]
-    return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    # Minimal keyboard for primary school.
+    keyboard = [[types.KeyboardButton(text=BTN_READ), types.KeyboardButton(text=BTN_PET)]]
+    return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 
 def choose_pet_inline_kb() -> types.InlineKeyboardMarkup:
@@ -31,10 +29,23 @@ def choose_pet_inline_kb() -> types.InlineKeyboardMarkup:
 
 
 def session_inline_kb() -> types.InlineKeyboardMarkup:
+    # Deprecated: keep for compatibility, but do not use in kid UI.
+    keyboard = [[types.InlineKeyboardButton(text="Stop", callback_data="session_stop")]]
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def care_actions_inline_kb() -> types.InlineKeyboardMarkup:
+    # Care actions unlocked after reading 5 units (then again after 10).
     keyboard = [
         [
-            types.InlineKeyboardButton(text="Hint", callback_data="session_hint"),
-            types.InlineKeyboardButton(text="Stop", callback_data="session_stop"),
-        ]
+            types.InlineKeyboardButton(text="🍎 Нагодуй", callback_data="care:feed"),
+            types.InlineKeyboardButton(text="💧 Напоїй", callback_data="care:water"),
+            types.InlineKeyboardButton(text="🫧 Помий", callback_data="care:wash"),
+        ],
+        [
+            types.InlineKeyboardButton(text="🎾 Пограй", callback_data="care:play"),
+            types.InlineKeyboardButton(text="😴 Спати", callback_data="care:sleep"),
+            types.InlineKeyboardButton(text="🩹 Полікуй", callback_data="care:heal"),
+        ],
     ]
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)

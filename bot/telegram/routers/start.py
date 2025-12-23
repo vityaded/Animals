@@ -14,14 +14,13 @@ def setup_start_router(ctx: AppContext) -> Router:
     async def cmd_start(message: types.Message) -> None:
         user_id = await ctx.repositories.users.upsert_user(message.from_user.id, message.from_user.username)
         await ctx.repositories.user_settings.ensure_settings(user_id, timezone=ctx.timezone)
-        await ctx.health_service.gain_heart(user_id)
         await ctx.pet_service.ensure_pet(user_id)
         await message.answer(
-            "Welcome! / Вітаємо!\nChoose a level and start a session. / Обери рівень і почни сесію.",
+            "Привіт!\nНатисни «Прочитай», щоб погодувати тваринку.",
             reply_markup=main_menu_kb(),
         )
         await message.answer(
-            "Choose your animal / Обери тваринку:",
+            "Обери тваринку:",
             reply_markup=choose_pet_inline_kb(),
         )
 
@@ -36,7 +35,7 @@ def setup_start_router(ctx: AppContext) -> Router:
             active = await ctx.session_service.get_active_session(user["id"])
             if active:
                 await ctx.session_service.revive_session(active.session_id)
-            await message.answer("Сесія розблокована, серця відновлено до 3.")
+            await message.answer("Готово.")
         else:
             token = await ctx.health_service.generate_revive(user["id"])
             await message.answer(f"Токен на відновлення: {token}")

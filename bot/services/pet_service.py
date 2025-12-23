@@ -298,10 +298,10 @@ class PetService:
             row = await self.repo.load_pet(user_id)
         assert row is not None
         if bool(row["is_dead"]):
-            return False, "🐾 Your pet is asleep (dead). Use /resurrect. / Твоя тваринка спить (померла). Використай /resurrect."
+            return False, "Тваринка спить 💤. Натисни «Прочитай», щоб оживити."
         tokens = int(row["action_tokens"])
         if tokens <= 0:
-            return False, "No care actions right now. Earn them by learning (5 correct = 1). / Зараз дій немає. Зароби їх навчанням (5 правильних = 1)."
+            return False, "Дій поки немає. Прочитай 5 одиниць — і з'явиться дія."
 
         hunger = int(row["hunger"])
         thirst = int(row["thirst"])
@@ -315,29 +315,29 @@ class PetService:
         if action == "feed":
             hunger += 35
             happiness += 5
-            msg = "🍎 Fed! / Нагодували!"
+            msg = "🍎 Нагодували!"
         elif action == "water":
             thirst += 35
             happiness += 5
-            msg = "💧 Watered! / Напоїли!"
+            msg = "💧 Напоїли!"
         elif action == "wash":
             hygiene += 35
             happiness += 4
-            msg = "🫧 Washed! / Помили!"
+            msg = "🫧 Помили!"
         elif action == "sleep":
             energy += 40
             happiness += 3
-            msg = "😴 Rested! / Відпочили!"
+            msg = "😴 Відпочили!"
         elif action == "play":
             mood += 40
             happiness += 6
-            msg = "🎾 Played! / Пограли!"
+            msg = "🎾 Пограли!"
         elif action == "heal":
             health += 35
             happiness += 3
-            msg = "🩹 Healed! / Полікували!"
+            msg = "🩹 Полікували!"
         else:
-            return False, "Unknown action. Use /feed /water /wash /sleep /play /heal"
+            return False, "Невідома дія."
 
         tokens -= 1
         await self.repo.update_pet(
@@ -351,7 +351,7 @@ class PetService:
             health=_clamp(health),
             happiness=_clamp(happiness),
         )
-        return True, f"{msg} Tokens left: {tokens}/2 / Залишилось дій: {tokens}/2"
+        return True, f"{msg} Дії: {tokens}/2"
 
     async def on_wrong(self, user_id: int) -> None:
         await self.on_wrong_attempt(user_id)
@@ -447,13 +447,16 @@ class PetService:
         return None
 
     def status_text(self, pet: PetStatus) -> str:
-        # bilingual mix
-        status = "DEAD" if pet.is_dead else ("SICK" if pet.missed_sessions_streak >= 3 else "OK")
-        ua_status = "ПОМЕР" if pet.is_dead else ("ХВОРІЄ" if pet.missed_sessions_streak >= 3 else "ОК")
-        return (
-            f"Pet: {pet.pet_type} / Тваринка: {pet.pet_type}\n"
-            f"Status: {status} / Стан: {ua_status}\n"
-            f"Happiness: {pet.happiness}/100 / Щастя: {pet.happiness}/100\n"
-            f"Tokens: {pet.action_tokens}/2 / Дії: {pet.action_tokens}/2\n"
-            f"Missed sessions streak: {pet.missed_sessions_streak} / Пропущені сесії підряд: {pet.missed_sessions_streak}"
-        )
+        # Kid-friendly, minimal Ukrainian status.
+        if pet.is_dead:
+            status = "Тваринка спить 💤"
+        elif pet.missed_sessions_streak >= 3:
+            status = "Тваринка хворіє 🤒"
+        elif pet.happiness >= 80:
+            status = "Тваринка щаслива 🙂"
+        elif pet.happiness >= 50:
+            status = "Тваринка норм 🙂"
+        else:
+            status = "Тваринці сумно 🙁"
+
+        return f"{status}\nДії: {pet.action_tokens}/2"

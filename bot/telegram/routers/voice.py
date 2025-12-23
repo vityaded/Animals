@@ -7,6 +7,7 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 
 from bot.telegram import AppContext
+from bot.telegram.keyboards import BTN_READ, care_actions_inline_kb
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +45,12 @@ def setup_voice_router(ctx: AppContext) -> Router:
         if not user:
             return
         if not state:
-            await message.answer("Немає активної сесії. Надішліть /session 1 щоб почати.")
+            await message.answer(f"Натисни «{BTN_READ}».")
             return
         await ctx.pet_service.ensure_pet(user["id"])
         pet = await ctx.pet_service.apply_decay(user["id"])
         if pet.is_dead and state.mode != "resurrect":
-            await message.answer("Your pet is dead/asleep. Use /resurrect. / Твоя тваринка померла/спить. Використай /resurrect.")
-            return
-        if state.blocked:
-            await message.answer("Серця закінчились. Використайте /revive щоб продовжити.")
+            await message.answer(f"Тваринка заснула. Натисни «{BTN_READ}» щоб оживити.")
             return
         file = await message.bot.get_file(message.voice.file_id)
         file_bytes = await message.bot.download_file(file.file_path, BytesIO())
@@ -62,7 +60,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
         transcript, score, ok = await ctx.speech_service.evaluate_async(audio_bytes, item.answer)
         await ctx.session_service.record_attempt(
             session_id=state.session_id,
-            prompt=item.prompt,
+            prompt=item.answer,
             user_answer=transcript,
             correct_answer=item.answer,
             is_correct=ok,
@@ -75,7 +73,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 if streak >= 20:
                     await ctx.pet_service.revive(user["id"])
                     await ctx.session_service.complete_session(state.session_id, user["id"], state.level, 0, state.total_items)
-                    await message.answer("✅ Pet revived! / Тваринку воскресили!")
+                    await message.answer("✅ Тваринка ожила!")
                     # Show pet card
                     pet2 = await ctx.pet_service.apply_decay(user["id"])
                     state_key = ctx.pet_service.pick_state(pet2)
@@ -85,19 +83,18 @@ def setup_voice_router(ctx: AppContext) -> Router:
                         from pathlib import Path
 
                         if path.exists() and path.suffix.lower() in {".jpg", ".png"}:
-                            await message.answer_photo(FSInputFile(Path(path)), caption=ctx.pet_service.status_text(pet2))
+                            await message.answer_photo(FSInputFile(Path(path)))
                     return
                 next_state = await ctx.session_service.get_active_session(user["id"])
                 if next_state:
                     next_item = await ctx.session_service.get_current_item(next_state.level, next_state.item_index)
-                    await message.answer(
-                        f"✅ Correct. Streak: {streak}/20. Next: {next_item.prompt}\n"
-                        f"✅ Правильно. Серія: {streak}/20. Далі: {next_item.prompt}"
-                    )
+                    await message.answer(f"✅ {streak}/20")
+                    await message.answer(f"{BTN_READ}:\n{next_item.answer}")
                 else:
-                    await message.answer(f"✅ Correct. Streak: {streak}/20 / Правильно: {streak}/20")
+                    await message.answer(f"✅ {streak}/20")
             else:
-                await message.answer(f"❌ Wrong. Streak reset: {streak}/20 / Неправильно. Серія скинута: {streak}/20")
+                await message.answer("Спробуй ще раз.")
+                await message.answer(f"{BTN_READ}:\n{item.answer}")
             return
 
         # Normal learning mode
@@ -111,31 +108,38 @@ def setup_voice_router(ctx: AppContext) -> Router:
             if new_correct >= 5 and reward_stage < 1:
                 await ctx.pet_service.add_action_token(user["id"])
                 await ctx.repositories.session_state.set_reward_stage(state.session_id, 1)
-                await message.answer("🎁 Care action unlocked! Use /feed /water /wash /sleep /play /heal\nДію відкрито! Використай /feed /water /wash /sleep /play /heal")
+                await message.answer("Обери, що зробити з тваринкою:", reply_markup=care_actions_inline_kb())
             if new_correct >= 10 and reward_stage < 2:
                 await ctx.pet_service.add_action_token(user["id"])
                 await ctx.repositories.session_state.set_reward_stage(state.session_id, 2)
-                await message.answer("🎁 Second care action unlocked! / Другу дію відкрито!")
+                await message.answer("Ще одна дія для тваринки:", reply_markup=care_actions_inline_kb())
 
             await ctx.session_service.advance_item(state.session_id)
             finished = await ctx.session_service.finish_if_needed(state.session_id, user["id"], state.level)
             if finished:
                 await ctx.pet_service.on_session_completed(user["id"])
-                await message.answer(f"Session finished! Streak today: {streak} / Сесію завершено! Серія: {streak}")
+                await message.answer("Готово! Молодець.")
+                # Show pet picture only
+                pet2 = await ctx.pet_service.apply_decay(user["id"])
+                state_key = ctx.pet_service.pick_state(pet2)
+                path = ctx.pet_service.asset_path(pet2.pet_type, state_key)
+                if path:
+                    from aiogram.types import FSInputFile
+                    from pathlib import Path
+
+                    if path.exists() and path.suffix.lower() in {".jpg", ".png"}:
+                        await message.answer_photo(FSInputFile(Path(path)))
             else:
                 next_state = await ctx.session_service.get_active_session(user["id"])
                 if next_state:
                     next_item = await ctx.session_service.get_current_item(next_state.level, next_state.item_index)
-                    await message.answer(f"✅ {score} — Correct! Next: {next_item.prompt}\n✅ {score} — Правильно! Далі: {next_item.prompt}")
+                    await message.answer("✅")
+                    await message.answer(f"{BTN_READ}:\n{next_item.answer}")
                 else:
-                    await message.answer("✅ Correct! / Правильно!")
+                    await message.answer("✅")
         else:
             await ctx.pet_service.on_wrong(user["id"])
-            hearts = await ctx.health_service.lose_heart(user["id"])
-            if hearts == 0:
-                await ctx.session_service.block_session(state.session_id)
-                await message.answer("❌ Wrong. No hearts. Use /revive. / Неправильно. Серця закінчились. /revive")
-            else:
-                await message.answer(f"❌ Wrong ({score}). Hearts left: {hearts} / Неправильно. Сердець: {hearts}")
+            await message.answer("Спробуй ще раз.")
+            await message.answer(f"{BTN_READ}:\n{item.answer}")
 
     return router
