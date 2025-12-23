@@ -186,7 +186,7 @@ def setup_pet_router(ctx: AppContext) -> Router:
             f"🧟 Resurrection challenge started (20 correct in a row). Session #{session_id}.\n"
             f"Почали воскресіння: 20 правильних підряд.")
         if state:
-            item = await ctx.session_service.get_current_item(state.level, state.item_index)
-            await message.answer(f"Task: {item.prompt} / Завдання: {item.prompt}")
+            item = await ctx.session_service.get_current_item(state.level, state.deck_ids, state.item_index)
+            await ctx.task_presenter.send_listen_and_read(message, item)
 
     return router

@@ -130,23 +130,37 @@ class SessionStateRepository:
         user_id: int,
         level: int,
         total_items: int,
+        deck_json: str | None = None,
         item_index: int = 0,
         blocked: int = 0,
         correct_count: int = 0,
         reward_stage: int = 0,
         mode: str = "normal",
+        current_attempts: int = 0,
     ) -> int:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 """
                 INSERT INTO session_state (
-                    session_id, user_id, level, item_index, total_items,
-                    correct_count, reward_stage, mode,
+                    session_id, user_id, level, deck_json, item_index, total_items,
+                    correct_count, reward_stage, mode, current_attempts,
                     blocked
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, user_id, level, item_index, total_items, correct_count, reward_stage, mode, blocked),
+                (
+                    session_id,
+                    user_id,
+                    level,
+                    deck_json,
+                    item_index,
+                    total_items,
+                    correct_count,
+                    reward_stage,
+                    mode,
+                    current_attempts,
+                    blocked,
+                ),
             )
             await conn.commit()
             return cursor.lastrowid
@@ -174,6 +188,26 @@ class SessionStateRepository:
             await conn.execute(
                 "UPDATE session_state SET item_index=?, updated_at=CURRENT_TIMESTAMP WHERE session_id=?",
                 (item_index, session_id),
+            )
+            await conn.commit()
+
+    async def update_attempts(self, session_id: int, current_attempts: int) -> None:
+        async with self.database.connect() as conn:
+            await conn.execute(
+                "UPDATE session_state SET current_attempts=?, updated_at=CURRENT_TIMESTAMP WHERE session_id=?",
+                (current_attempts, session_id),
+            )
+            await conn.commit()
+
+    async def update_deck(self, session_id: int, deck_json: str, total_items: int) -> None:
+        async with self.database.connect() as conn:
+            await conn.execute(
+                """
+                UPDATE session_state
+                SET deck_json=?, total_items=?, updated_at=CURRENT_TIMESTAMP
+                WHERE session_id=?
+                """,
+                (deck_json, total_items, session_id),
             )
             await conn.commit()
 
@@ -218,18 +252,39 @@ class AttemptRepository:
     async def log_attempt(
         self,
         session_id: int,
-        question: str,
-        user_answer: str,
-        correct_answer: str,
+        user_id: int,
+        content_id: str | None,
+        expected_text: str,
+        transcript: str,
+        similarity: int,
+        is_first_try: bool,
         is_correct: bool,
+        question: str | None = None,
+        user_answer: str | None = None,
+        correct_answer: str | None = None,
     ) -> int:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
                 """
-                INSERT INTO attempts (session_id, question, user_answer, correct_answer, is_correct)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO attempts (
+                    session_id, user_id, content_id, expected_text, transcript, similarity,
+                    is_first_try, is_correct, question, user_answer, correct_answer
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, question, user_answer, correct_answer, int(is_correct)),
+                (
+                    session_id,
+                    user_id,
+                    content_id,
+                    expected_text,
+                    transcript,
+                    similarity,
+                    int(is_first_try),
+                    int(is_correct),
+                    question,
+                    user_answer,
+                    correct_answer,
+                ),
             )
             await conn.commit()
             return cursor.lastrowid
@@ -281,18 +336,29 @@ class DailyStatsRepository:
     def __init__(self, database: Database):
         self.database = database
 
-    async def update_stats(self, user_id: int, date: str, attempts: int, correct: int, streak: int) -> None:
+    async def update_stats(
+        self,
+        user_id: int,
+        date: str,
+        attempts: int,
+        correct: int,
+        streak: int,
+        first_try_total: int = 0,
+        first_try_errors: int = 0,
+    ) -> None:
         async with self.database.connect() as conn:
             await conn.execute(
                 """
-                INSERT INTO daily_stats (user_id, date, attempts, correct, streak)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO daily_stats (user_id, date, attempts, correct, streak, first_try_total, first_try_errors)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, date) DO UPDATE SET
                     attempts=attempts+excluded.attempts,
                     correct=correct+excluded.correct,
+                    first_try_total=first_try_total+excluded.first_try_total,
+                    first_try_errors=first_try_errors+excluded.first_try_errors,
                     streak=excluded.streak
                 """,
-                (user_id, date, attempts, correct, streak),
+                (user_id, date, attempts, correct, streak, first_try_total, first_try_errors),
             )
             await conn.commit()
 
@@ -419,6 +485,32 @@ class PetRepository:
             await conn.commit()
 
 
+class ItemProgressRepository:
+    def __init__(self, database: Database):
+        self.database = database
+
+    async def mark_passed(self, user_id: int, level: int, content_id: str) -> None:
+        async with self.database.connect() as conn:
+            await conn.execute(
+                """
+                INSERT INTO item_progress (user_id, level, content_id, passed_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, level, content_id) DO UPDATE SET passed_at=CURRENT_TIMESTAMP
+                """,
+                (user_id, level, content_id),
+            )
+            await conn.commit()
+
+    async def list_passed(self, user_id: int, level: int) -> set[str]:
+        async with self.database.connect() as conn:
+            cursor = await conn.execute(
+                "SELECT content_id FROM item_progress WHERE user_id=? AND level=?",
+                (user_id, level),
+            )
+            rows = await cursor.fetchall()
+            return {row["content_id"] for row in rows} if rows else set()
+
+
 @dataclass
 class RepositoryProvider:
     users: UserRepository
@@ -431,6 +523,7 @@ class RepositoryProvider:
     revive: ReviveRepository
     user_settings: UserSettingsRepository
     pets: PetRepository
+    item_progress: ItemProgressRepository
 
     @classmethod
     def build(cls, database: Database) -> "RepositoryProvider":
@@ -445,6 +538,7 @@ class RepositoryProvider:
             revive=ReviveRepository(database),
             user_settings=UserSettingsRepository(database),
             pets=PetRepository(database),
+            item_progress=ItemProgressRepository(database),
         )
 
     def as_dict(self) -> Dict[str, object]:

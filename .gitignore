@@ -44,6 +44,8 @@ ENV/
 logs/
 tmp/
 .cache/
+data/tts_cache/
+data/content_progress.json
 
 # Audio artifacts (if you generate/convert voice locally)
 *.wav

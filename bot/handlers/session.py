@@ -17,7 +17,7 @@ async def handle_start_session(
     if not user:
         return "Спочатку надішліть /start"
     session_id = await session_service.start_session(user_id=user["id"], level=level, deadline_minutes=deadline_minutes)
-    items: Iterable[str] = (item.prompt for item in await session_service.get_items_for_level(level))
+    items: Iterable[str] = (item.text for item in await session_service.get_items_for_level(level))
     first_item = next(iter(items), None)
     if not first_item:
         return f"Контент рівня {level} відсутній."

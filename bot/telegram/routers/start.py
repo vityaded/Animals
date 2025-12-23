@@ -4,7 +4,7 @@ from aiogram import Router, types
 from aiogram.filters import Command, CommandStart
 
 from bot.telegram import AppContext
-from bot.telegram.keyboards import main_menu_kb, choose_pet_inline_kb
+from bot.telegram.keyboards import main_menu_kb
 
 
 def setup_start_router(ctx: AppContext) -> Router:
@@ -16,12 +16,8 @@ def setup_start_router(ctx: AppContext) -> Router:
         await ctx.repositories.user_settings.ensure_settings(user_id, timezone=ctx.timezone)
         await ctx.pet_service.ensure_pet(user_id)
         await message.answer(
-            "Привіт!\nНатисни «Прочитай», щоб погодувати тваринку.",
+            "Привіт!\nЯ твоя тваринка.\nНатисни «Прочитай», щоб погодувати мене.\n«Моя тваринка» покаже, як я почуваюся.",
             reply_markup=main_menu_kb(),
-        )
-        await message.answer(
-            "Обери тваринку:",
-            reply_markup=choose_pet_inline_kb(),
         )
 
     @router.message(Command("revive"))

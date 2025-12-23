@@ -12,7 +12,9 @@ from bot.services.content_service import ContentService
 from bot.services.health_service import HealthService
 from bot.services.progress_service import ProgressService
 from bot.services.session_service import SessionService
+from bot.services.task_presenter import TaskPresenter
 from bot.services.speech_service import SpeechService
+from bot.services.tts_service import TTSService
 from bot.services.pet_service import PetService
 from bot.storage.repositories import Database, RepositoryProvider
 from bot.telegram import AppContext
@@ -38,6 +40,8 @@ async def main() -> None:
     progress_service = ProgressService(repositories.progress, repositories.daily_stats)
     health_service = HealthService(repositories.health, repositories.revive)
     speech_service = SpeechService(config.whisper_model)
+    tts_service = TTSService()
+    task_presenter = TaskPresenter(Path("assets"), tts_service)
     pet_service = PetService(
         repo=repositories.pets,
         assets_root=Path("assets/pets"),
@@ -53,6 +57,8 @@ async def main() -> None:
         health_service=health_service,
         pet_service=pet_service,
         speech_service=speech_service,
+        tts_service=tts_service,
+        task_presenter=task_presenter,
         timezone=str(config.timezone),
     )
 

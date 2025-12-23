@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     telegram_id INTEGER UNIQUE NOT NULL,
     username TEXT,
+    current_level INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -18,12 +19,19 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
-    question TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    content_id TEXT,
+    expected_text TEXT,
+    transcript TEXT,
+    similarity INTEGER,
+    is_first_try INTEGER NOT NULL DEFAULT 0,
+    is_correct INTEGER DEFAULT 0,
+    question TEXT,
     user_answer TEXT,
     correct_answer TEXT,
-    is_correct INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions (id)
+    FOREIGN KEY (session_id) REFERENCES sessions (id),
+    FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
 CREATE TABLE IF NOT EXISTS level_progress (
@@ -42,6 +50,8 @@ CREATE TABLE IF NOT EXISTS daily_stats (
     date TEXT NOT NULL,
     attempts INTEGER DEFAULT 0,
     correct INTEGER DEFAULT 0,
+    first_try_total INTEGER NOT NULL DEFAULT 0,
+    first_try_errors INTEGER NOT NULL DEFAULT 0,
     streak INTEGER DEFAULT 0,
     UNIQUE (user_id, date),
     FOREIGN KEY (user_id) REFERENCES users (id)
@@ -69,8 +79,10 @@ CREATE TABLE IF NOT EXISTS session_state (
     session_id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL,
     level INTEGER NOT NULL,
+    deck_json TEXT,
     item_index INTEGER NOT NULL DEFAULT 0,
     total_items INTEGER NOT NULL,
+    current_attempts INTEGER NOT NULL DEFAULT 0,
     correct_count INTEGER NOT NULL DEFAULT 0,
     reward_stage INTEGER NOT NULL DEFAULT 0,
     mode TEXT NOT NULL DEFAULT 'normal',
@@ -105,6 +117,15 @@ CREATE TABLE IF NOT EXISTS user_settings (
     notifications_enabled INTEGER NOT NULL DEFAULT 1,
     timezone TEXT DEFAULT 'Europe/Helsinki',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS item_progress (
+    user_id INTEGER NOT NULL,
+    level INTEGER NOT NULL,
+    content_id TEXT NOT NULL,
+    passed_at TEXT,
+    PRIMARY KEY (user_id, level, content_id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

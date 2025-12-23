@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from bot.services.content_service import ContentService, LevelItem
+from bot.services.content_service import ContentService
 from bot.services.session_service import SessionService
 from bot.services.speech_service import SpeechService
 from bot.storage.repositories import Database, RepositoryProvider
@@ -22,7 +22,12 @@ from bot.storage.repositories import Database, RepositoryProvider
 def _build_content(tmpdir: Path) -> ContentService:
     levels_dir = tmpdir / "levels"
     levels_dir.mkdir()
-    (levels_dir / "level1.csv").write_text("prompt,answer,hint\nHello,Hello world,Hint\nBye,Good bye,\n", encoding="utf-8")
+    (levels_dir / "level1.csv").write_text(
+        "id,text,sound,image,sublevel\n"
+        "mono1,Hello world,,,mono\n"
+        "mono2,Good bye,,,mono\n",
+        encoding="utf-8",
+    )
     return ContentService(levels_dir)
 
 
@@ -42,6 +47,8 @@ async def test_session_state_flow():
         state = await session_service.get_active_session(user_id)
         assert state is not None
         assert state.item_index == 0
+        assert state.deck_ids
+        assert state.total_items == len(state.deck_ids)
 
         await session_service.advance_item(session_id)
         state = await session_service.get_active_session(user_id)
