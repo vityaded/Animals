@@ -694,20 +694,27 @@ class RepositoryProvider:
     async def reset_all(self) -> None:
         async with self.database.connect() as conn:
             await conn.execute("PRAGMA foreign_keys=OFF")
-            for table in (
-                "attempts",
-                "session_state",
-                "sessions",
-                "level_progress",
-                "daily_stats",
-                "health",
-                "revive",
-                "user_settings",
-                "pets",
-                "item_progress",
-                "users",
-            ):
-                await conn.execute(f"DELETE FROM {table}")
-            await conn.execute("VACUUM")
-            await conn.execute("PRAGMA foreign_keys=ON")
-            await conn.commit()
+            try:
+                await conn.execute("BEGIN")
+                try:
+                    for table in (
+                        "attempts",
+                        "session_state",
+                        "sessions",
+                        "level_progress",
+                        "daily_stats",
+                        "health",
+                        "revive",
+                        "user_settings",
+                        "pets",
+                        "item_progress",
+                        "users",
+                    ):
+                        await conn.execute(f"DELETE FROM {table}")
+                    await conn.commit()
+                except Exception:
+                    await conn.rollback()
+                    raise
+                await conn.execute("VACUUM")
+            finally:
+                await conn.execute("PRAGMA foreign_keys=ON")

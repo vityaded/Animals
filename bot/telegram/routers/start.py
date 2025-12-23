@@ -47,10 +47,7 @@ def setup_start_router(ctx: AppContext) -> Router:
 
     @router.message(Command("reset_all"))
     async def cmd_reset_all(message: types.Message) -> None:
-        if message.from_user.id not in ctx.admin_ids:
-            await message.answer("Not allowed.")
-            return
         await ctx.repositories.reset_all()
-        await message.answer("DB cleared. Надішліть /start щоб почати заново.")
+        await message.answer("OK. Database cleared.")
 
     return router
