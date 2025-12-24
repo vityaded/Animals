@@ -109,6 +109,33 @@ class SessionService:
         )
         return session_id
 
+    async def start_freecare_gate(self, user_id: int, level: int, content_id: str) -> int:
+        """
+        Starts a tiny 1-item session used to unlock a care choice.
+        Must NOT count as a normal reading session (mode != 'normal').
+        """
+        session_id = await self.repositories.sessions.create_session(user_id, level, due_at=None)
+        await self.repositories.sessions.update_status(session_id, "active")
+        deck = [DeckItem(level=level, content_id=content_id)]
+        await self.repositories.session_state.create_state(
+            session_id=session_id,
+            user_id=user_id,
+            level=level,
+            deck_json=json.dumps([item.to_dict() for item in deck], ensure_ascii=False),
+            total_items=1,
+            item_index=0,
+            blocked=0,
+            correct_count=0,
+            reward_stage=0,
+            mode="freecare",
+            current_attempts=0,
+            wrong_total=0,
+            care_stage=0,
+            awaiting_care=0,
+            care_json=None,
+        )
+        return session_id
+
     async def start_revival(self, user_id: int, level: int = 1, deadline_minutes: int = 180) -> int:
         """Start a special session where the user processes 20 cards to revive a dead pet."""
         due_at = datetime.now(timezone.utc) + timedelta(minutes=deadline_minutes)

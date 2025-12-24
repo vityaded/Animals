@@ -3,13 +3,20 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from datetime import datetime, timezone
 from io import BytesIO
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
 from bot.telegram import AppContext
-from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
+from bot.telegram.keyboards import (
+    BTN_CARE,
+    care_inline_kb,
+    care_more_inline_kb,
+    choose_pet_inline_kb,
+    repeat_inline_kb,
+)
 from bot.telegram.media import answer_photo_safe
 from bot.telegram.media_utils import answer_photo_or_text
 
@@ -74,8 +81,9 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 message,
                 img,
                 "✅ Готово!\n" + ctx.pet_service.status_text(pet_now),
+                reply_markup=care_more_inline_kb(),
             )
-        else:
+        elif state.mode == "revival":
             await ctx.pet_service.revive(state.user_id)
             pet_now = await ctx.pet_service.rollover_if_needed(state.user_id)
             img = ctx.pet_service.asset_path(pet_now.pet_type, ctx.pet_service.pick_state(pet_now))
@@ -83,6 +91,16 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 message,
                 img,
                 "✅ Відновлено!\n" + ctx.pet_service.status_text(pet_now),
+                reply_markup=care_more_inline_kb(),
+            )
+        else:
+            pet_now = await ctx.pet_service.rollover_if_needed(state.user_id)
+            img = ctx.pet_service.asset_path(pet_now.pet_type, ctx.pet_service.pick_state(pet_now))
+            await answer_photo_or_text(
+                message,
+                img,
+                "✅ Готово!\n" + ctx.pet_service.status_text(pet_now),
+                reply_markup=care_more_inline_kb(),
             )
 
     def _need_to_action(need_key: str) -> str:
@@ -132,6 +150,54 @@ def setup_voice_router(ctx: AppContext) -> Router:
             state.session_id, awaiting_care=1, care_stage=state.care_stage + 1, care_json=json.dumps(care_json)
         )
         return choices, active_need, need_state
+
+    def _two_word_candidates(level: int) -> list[str]:
+        items = ctx.content_service.list_items(level)
+        out: list[str] = []
+        for it in items:
+            tokens = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", it.text.strip())
+            if len(tokens) == 2:
+                out.append(it.id)
+        return out
+
+    @router.callback_query(F.data == "care_more")
+    async def on_care_more(callback: types.CallbackQuery) -> None:
+        user = await ctx.repositories.users.get_user(callback.from_user.id)
+        if not user:
+            await callback.answer("/start", show_alert=True)
+            return
+        pet_row = await ctx.repositories.pets.load_pet(user["id"])
+        if pet_row is None:
+            await callback.message.answer(
+                "Спочатку обери тваринку:",
+                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+            )
+            await callback.answer()
+            return
+
+        active = await ctx.session_service.get_active_session(user["id"])
+        if active and active.mode == "normal":
+            await callback.answer("Зараз триває сесія.", show_alert=True)
+            return
+
+        user_level = int(user.get("current_level", 1))
+        chosen_level = None
+        chosen_id = None
+        for lvl in [user_level, 1, 2, 3]:
+            ids = _two_word_candidates(lvl)
+            if ids:
+                chosen_level = lvl
+                chosen_id = random.choice(ids)
+                break
+        if not chosen_id or not chosen_level:
+            await callback.answer("Немає коротких карток (2 слова).", show_alert=True)
+            return
+
+        await ctx.session_service.start_freecare_gate(user_id=user["id"], level=chosen_level, content_id=chosen_id)
+        state = await ctx.session_service.get_active_session(user["id"])
+        if state:
+            await _send_task(callback.message, state)
+        await callback.answer()
 
     @router.message(F.voice)
     async def handle_voice(message: types.Message) -> None:
@@ -204,6 +270,18 @@ def setup_voice_router(ctx: AppContext) -> Router:
         if not updated_state:
             return
         processed = updated_state.item_index
+
+        if updated_state.mode == "freecare" and processed >= updated_state.total_items and updated_state.care_stage < 1:
+            options, _, need_state = await _schedule_care(user["id"], updated_state)
+            pet = await ctx.pet_service.rollover_if_needed(user["id"])
+            img = ctx.pet_service.asset_path(pet.pet_type, need_state)
+            await answer_photo_or_text(
+                message,
+                img,
+                "Подбай про тваринку:",
+                reply_markup=care_inline_kb(options),
+            )
+            return
 
         if updated_state.mode == "normal" and processed in (5, 10) and updated_state.care_stage < (1 if processed == 5 else 2):
             options, _, need_state = await _schedule_care(user["id"], updated_state)
