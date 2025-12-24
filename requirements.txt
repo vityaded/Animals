@@ -6,3 +6,4 @@ aiosqlite
 pytest
 pytest-asyncio
 edge-tts
+pillow
