@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import random
-import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 from aiogram import F, Router, types
@@ -151,6 +150,57 @@ def setup_voice_router(ctx: AppContext) -> Router:
         )
         return choices, active_need, need_state
 
+    def _parse_ts(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        try:
+            dt = datetime.fromisoformat(str(value).replace(" ", "T"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+    async def _pick_freecare_pair(user_id: int, level: int) -> str | None:
+        now = datetime.now(timezone.utc)
+        recent_block = timedelta(minutes=30)
+
+        rows = await ctx.repositories.item_progress.list_all(user_id)
+        progress = {}
+        for r in rows:
+            key = (int(r["level"]), str(r["content_id"]))
+            progress[key] = {
+                "review_stage": int(r.get("review_stage") or 0),
+                "last_seen_at": _parse_ts(r.get("last_seen_at")),
+                "next_due_at": _parse_ts(r.get("next_due_at")),
+            }
+
+        def is_finished(cid: str) -> bool:
+            meta = progress.get((level, cid))
+            return bool(meta and meta["review_stage"] == 3)
+
+        def is_due(cid: str) -> bool:
+            meta = progress.get((level, cid))
+            return bool(meta and meta["next_due_at"] and meta["next_due_at"] <= now)
+
+        def is_recent(cid: str) -> bool:
+            meta = progress.get((level, cid))
+            return bool(meta and meta["last_seen_at"] and (now - meta["last_seen_at"]) < recent_block)
+
+        items = ctx.content_service.get_level_items(level)
+        chosen: list[str] = []
+        for it in items:
+            cid = it.id
+            if is_finished(cid):
+                continue
+            if (not is_due(cid)) and is_recent(cid):
+                continue
+            chosen.append(cid)
+            if len(chosen) == 2:
+                return f"PAIR:{chosen[0]}+{chosen[1]}"
+
+        return None
+
     @router.callback_query(F.data == "care_more")
     async def on_care_more(callback: types.CallbackQuery) -> None:
         user = await ctx.repositories.users.get_user(callback.from_user.id)
@@ -171,35 +221,38 @@ def setup_voice_router(ctx: AppContext) -> Router:
             await callback.answer("Зараз триває сесія.", show_alert=True)
             return
 
-        user_level = int(user.get("current_level", 1))
-        # Build an ordered candidate list (due first, then current level in CSV order, then higher levels).
-        candidate_deck = await ctx.session_service.build_deck(
-            user["id"], user_level, total_items=50
-        )
-        chosen = None
-        for d in candidate_deck:
-            try:
-                it = ctx.content_service.get_item(d.level, d.content_id)
-            except Exception:
-                continue
-            tokens = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", it.text.strip())
-            if len(tokens) == 2:
-                chosen = d
-                break
+        current_level = int(user.get("current_level", 1))
+        pair_id = await _pick_freecare_pair(user["id"], current_level)
 
-        if not chosen:
-            await callback.answer("Немає коротких карток (2 слова).", show_alert=True)
+        if not pair_id:
+            for lvl in ctx.content_service.available_levels():
+                if lvl <= current_level:
+                    continue
+                pair_id = await _pick_freecare_pair(user["id"], lvl)
+                if pair_id:
+                    current_level = lvl
+                    break
+
+        if not pair_id:
+            await callback.answer("Немає доступних слів для «попіклуватися ще».", show_alert=True)
             return
 
         await ctx.session_service.start_freecare_gate(
             user_id=user["id"],
-            level=chosen.level,
-            content_id=chosen.content_id,
+            level=current_level,
+            content_id=pair_id,
         )
         state = await ctx.session_service.get_active_session(user["id"])
         if state:
             await _send_task(callback.message, state)
         await callback.answer()
+
+    def _pair_components(content_id: str) -> list[str]:
+        if not content_id.startswith("PAIR:"):
+            return [content_id]
+        ids_part = content_id.split(":", 1)[1]
+        a_id, b_id = ids_part.split("+", 1)
+        return [a_id, b_id]
 
     @router.message(F.voice)
     async def handle_voice(message: types.Message) -> None:
@@ -251,13 +304,15 @@ def setup_voice_router(ctx: AppContext) -> Router:
         now_utc = datetime.now(timezone.utc)
 
         if ok:
-            await ctx.repositories.item_progress.record_correct(user["id"], deck_item.level, deck_item.content_id, now_utc=now_utc)
+            for cid in _pair_components(deck_item.content_id):
+                await ctx.repositories.item_progress.record_correct(user["id"], deck_item.level, cid, now_utc=now_utc)
             await ctx.repositories.session_state.increment_correct(state.session_id)
             await ctx.session_service.advance_item(state.session_id)
             await message.answer("✅ Добре!")
         else:
             await ctx.repositories.session_state.increment_wrong_total(state.session_id)
-            await ctx.repositories.item_progress.record_wrong(user["id"], deck_item.level, deck_item.content_id, now_utc=now_utc)
+            for cid in _pair_components(deck_item.content_id):
+                await ctx.repositories.item_progress.record_wrong(user["id"], deck_item.level, cid, now_utc=now_utc)
             attempts = state.current_attempts + 1
             if attempts >= 5:
                 await message.answer("Йдемо далі")
