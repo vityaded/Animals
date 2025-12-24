@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -267,6 +266,26 @@ class SessionService:
             row = progress_map.get((level, content_id))
             return bool(row and row.get("review_stage") == 3)
 
+        # Auto-advance: if the whole level is finished, move to the next level.
+        levels = self.content_service.available_levels()
+        max_level = max(levels) if levels else current_level
+
+        def level_completed(lvl: int) -> bool:
+            try:
+                items = self.content_service.get_level_items(lvl)
+            except Exception:
+                return False
+            if not items:
+                return False
+            return all(is_finished(lvl, it.id) for it in items)
+
+        effective_level = int(current_level)
+        while effective_level < max_level and level_completed(effective_level):
+            effective_level += 1
+        if effective_level != int(current_level):
+            await self.repositories.users.set_current_level(user_id, effective_level)
+            current_level = effective_level
+
         def due_items() -> list[DeckItem]:
             due: list[DeckItem] = []
             for (lvl, cid), meta in progress_map.items():
@@ -298,7 +317,7 @@ class SessionService:
             return bool(last_seen and (now - last_seen) < recent_block)
 
         def add_items(item_level: int, items: list[ContentItem]) -> None:
-            random.shuffle(items)
+            # IMPORTANT: do NOT shuffle. Preserve CSV order.
             for itm in items:
                 if len(deck) >= total_items:
                     break
@@ -320,9 +339,9 @@ class SessionService:
         unfinished = [i for i in level_items if not is_finished(current_level, i.id)]
         add_items(current_level, unfinished or level_items)
 
-        # Step 3: any unfinished items from other levels.
+        # Step 3: only higher levels (level-by-level), also in CSV order.
         for lvl in self.content_service.available_levels():
-            if len(deck) >= total_items or lvl == current_level:
+            if len(deck) >= total_items or lvl <= current_level:
                 continue
             try:
                 items = self.content_service.get_level_items(lvl)

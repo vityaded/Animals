@@ -144,3 +144,56 @@ def test_speech_service_relaxed_close_phonemes_vowels():
     _, score2, ok2 = service._evaluate_transcript("fool", "full", threshold=80)
     assert ok2 is True
     assert score2 >= 80
+
+
+@pytest.mark.asyncio
+async def test_deck_is_consecutive_and_levels_advance():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
+        await db.ensure_schema()
+        repos = RepositoryProvider.build(db)
+
+        # Build 2 levels with known CSV order
+        levels_dir = tmp_path / "levels"
+        levels_dir.mkdir()
+        (levels_dir / "level1.csv").write_text(
+            "id,text,sound,image\n"
+            "a1,cat,,\n"
+            "a2,dog,,\n"
+            "a3,sun,,\n",
+            encoding="utf-8",
+        )
+        (levels_dir / "level2.csv").write_text(
+            "id,text,sound,image\n"
+            "b1,a red ball,,\n"
+            "b2,a blue bag,,\n",
+            encoding="utf-8",
+        )
+        content = ContentService(levels_dir)
+        session_service = SessionService(repos, content)
+
+        user_id = await repos.users.upsert_user(1, "tester")
+
+        deck = await session_service.build_deck(user_id, current_level=1, total_items=3)
+        assert [d.content_id for d in deck] == ["a1", "a2", "a3"]
+
+        # Finish all level1 items (drive them to review_stage=3)
+        now = datetime.now(timezone.utc)
+        for cid in ["a1", "a2", "a3"]:
+            await repos.item_progress.record_correct(user_id, 1, cid, now_utc=now)
+            await repos.item_progress.record_correct(
+                user_id, 1, cid, now_utc=now + timedelta(seconds=1)
+            )
+            await repos.item_progress.record_correct(
+                user_id, 1, cid, now_utc=now + timedelta(minutes=11)
+            )
+            await repos.item_progress.record_correct(
+                user_id, 1, cid, now_utc=now + timedelta(days=3)
+            )
+
+        deck2 = await session_service.build_deck(user_id, current_level=1, total_items=2)
+        assert [d.content_id for d in deck2] == ["b1", "b2"]
+
+        u = await repos.users.get_user_by_id(user_id)
+        assert int(u["current_level"]) == 2
