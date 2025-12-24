@@ -108,20 +108,22 @@ class SessionService:
         )
         return session_id
 
-    async def start_freecare_gate(self, user_id: int, level: int, content_id: str) -> int:
+    async def start_freecare_gate(self, user_id: int, level: int, content_ids: list[str]) -> int:
         """
         Starts a tiny 1-item session used to unlock a care choice.
         Must NOT count as a normal reading session (mode != 'normal').
         """
         session_id = await self.repositories.sessions.create_session(user_id, level, due_at=None)
         await self.repositories.sessions.update_status(session_id, "active")
-        deck = [DeckItem(level=level, content_id=content_id)]
+        if not content_ids:
+            raise ValueError("content_ids is empty")
+        deck = [DeckItem(level=level, content_id=cid) for cid in content_ids]
         await self.repositories.session_state.create_state(
             session_id=session_id,
             user_id=user_id,
             level=level,
             deck_json=json.dumps([item.to_dict() for item in deck], ensure_ascii=False),
-            total_items=1,
+            total_items=len(deck),
             item_index=0,
             blocked=0,
             correct_count=0,
@@ -165,20 +167,6 @@ class SessionService:
         return SessionState.from_row(row) if row else None
 
     async def get_current_item(self, deck_item: DeckItem) -> ContentItem:
-        if deck_item.content_id.startswith("PAIR:"):
-            ids_part = deck_item.content_id.split(":", 1)[1]
-            a_id, b_id = ids_part.split("+", 1)
-
-            a = self.content_service.get_item(deck_item.level, a_id)
-            b = self.content_service.get_item(deck_item.level, b_id)
-
-            return ContentItem(
-                id=deck_item.content_id,
-                text=f"{a.text.strip()} {b.text.strip()}",
-                sound=None,
-                image=None,
-            )
-
         return self.content_service.get_item(deck_item.level, deck_item.content_id)
 
     async def advance_item(self, session_id: int) -> None:
