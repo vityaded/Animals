@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -238,6 +239,7 @@ class SessionService:
 
     async def build_deck(self, user_id: int, current_level: int, total_items: int) -> list[DeckItem]:
         now = datetime.now(timezone.utc)
+        recent_block = timedelta(minutes=30)
         progress_rows = await self.repositories.item_progress.list_all(user_id)
 
         def parse_ts(value: object | None) -> Optional[datetime]:
@@ -280,7 +282,9 @@ class SessionService:
         chosen: set[tuple[int, str]] = set()
 
         # Step 1: due review items.
-        for item in due_items():
+        due_list = due_items()
+        due_keys = {(item.level, item.content_id) for item in due_list}
+        for item in due_list:
             if len(deck) >= total_items:
                 break
             if (item.level, item.content_id) in chosen:
@@ -288,7 +292,13 @@ class SessionService:
             deck.append(item)
             chosen.add((item.level, item.content_id))
 
+        def is_recent(level: int, content_id: str) -> bool:
+            meta = progress_map.get((level, content_id))
+            last_seen = meta.get("last_seen_at") if meta else None
+            return bool(last_seen and (now - last_seen) < recent_block)
+
         def add_items(item_level: int, items: list[ContentItem]) -> None:
+            random.shuffle(items)
             for itm in items:
                 if len(deck) >= total_items:
                     break
@@ -296,6 +306,8 @@ class SessionService:
                 if key in chosen:
                     continue
                 if is_finished(item_level, itm.id):
+                    continue
+                if key not in due_keys and is_recent(item_level, itm.id):
                     continue
                 deck.append(DeckItem(level=item_level, content_id=itm.id))
                 chosen.add(key)
@@ -323,9 +335,15 @@ class SessionService:
         if len(deck) < total_items and level_items:
             idx = 0
             pool = level_items
-            while len(deck) < total_items and pool:
+            guard = 0
+            while len(deck) < total_items and pool and guard < (len(pool) * 3):
                 itm = pool[idx % len(pool)]
-                deck.append(DeckItem(level=current_level, content_id=itm.id))
+                key = (current_level, itm.id)
+                if key not in chosen:
+                    if key in due_keys or not is_recent(current_level, itm.id):
+                        deck.append(DeckItem(level=current_level, content_id=itm.id))
+                        chosen.add(key)
                 idx += 1
+                guard += 1
 
         return deck[:total_items]

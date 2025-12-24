@@ -644,7 +644,10 @@ class ItemProgressRepository:
             )
             row = await row_cursor.fetchone()
             review_stage = int(row["review_stage"]) if row and row["review_stage"] is not None else 0
-            next_due_at = now_utc + timedelta(minutes=10) if review_stage >= 1 else None
+            if review_stage >= 1:
+                next_due_at = now_utc + timedelta(minutes=10)
+            else:
+                next_due_at = now_utc + timedelta(minutes=2)
             await conn.execute(
                 """
                 UPDATE item_progress
