@@ -44,6 +44,11 @@ def repeat_inline_kb() -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
+def care_more_inline_kb() -> types.InlineKeyboardMarkup:
+    keyboard = [[types.InlineKeyboardButton(text="➕ Попіклуватися ще", callback_data="care_more")]]
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
 CARE_LABELS = {
     "feed": "🍎 Нагодувати",
     "water": "💧 Напоїти",
