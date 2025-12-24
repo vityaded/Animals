@@ -165,6 +165,20 @@ class SessionService:
         return SessionState.from_row(row) if row else None
 
     async def get_current_item(self, deck_item: DeckItem) -> ContentItem:
+        if deck_item.content_id.startswith("PAIR:"):
+            ids_part = deck_item.content_id.split(":", 1)[1]
+            a_id, b_id = ids_part.split("+", 1)
+
+            a = self.content_service.get_item(deck_item.level, a_id)
+            b = self.content_service.get_item(deck_item.level, b_id)
+
+            return ContentItem(
+                id=deck_item.content_id,
+                text=f"{a.text.strip()} {b.text.strip()}",
+                sound=None,
+                image=None,
+            )
+
         return self.content_service.get_item(deck_item.level, deck_item.content_id)
 
     async def advance_item(self, session_id: int) -> None:
