@@ -161,7 +161,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
         except Exception:
             return None
 
-    async def _pick_freecare_pair(user_id: int, level: int) -> str | None:
+    async def _pick_freecare_two(user_id: int, level: int) -> list[str] | None:
         now = datetime.now(timezone.utc)
         recent_block = timedelta(minutes=30)
 
@@ -197,7 +197,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 continue
             chosen.append(cid)
             if len(chosen) == 2:
-                return f"PAIR:{chosen[0]}+{chosen[1]}"
+                return chosen
 
         return None
 
@@ -222,37 +222,30 @@ def setup_voice_router(ctx: AppContext) -> Router:
             return
 
         current_level = int(user.get("current_level", 1))
-        pair_id = await _pick_freecare_pair(user["id"], current_level)
+        ids = await _pick_freecare_two(user["id"], current_level)
 
-        if not pair_id:
+        if not ids:
             for lvl in ctx.content_service.available_levels():
                 if lvl <= current_level:
                     continue
-                pair_id = await _pick_freecare_pair(user["id"], lvl)
-                if pair_id:
+                ids = await _pick_freecare_two(user["id"], lvl)
+                if ids:
                     current_level = lvl
                     break
 
-        if not pair_id:
+        if not ids:
             await callback.answer("Немає доступних слів для «попіклуватися ще».", show_alert=True)
             return
 
         await ctx.session_service.start_freecare_gate(
             user_id=user["id"],
             level=current_level,
-            content_id=pair_id,
+            content_ids=ids,
         )
         state = await ctx.session_service.get_active_session(user["id"])
         if state:
             await _send_task(callback.message, state)
         await callback.answer()
-
-    def _pair_components(content_id: str) -> list[str]:
-        if not content_id.startswith("PAIR:"):
-            return [content_id]
-        ids_part = content_id.split(":", 1)[1]
-        a_id, b_id = ids_part.split("+", 1)
-        return [a_id, b_id]
 
     @router.message(F.voice)
     async def handle_voice(message: types.Message) -> None:
@@ -304,15 +297,17 @@ def setup_voice_router(ctx: AppContext) -> Router:
         now_utc = datetime.now(timezone.utc)
 
         if ok:
-            for cid in _pair_components(deck_item.content_id):
-                await ctx.repositories.item_progress.record_correct(user["id"], deck_item.level, cid, now_utc=now_utc)
+            await ctx.repositories.item_progress.record_correct(
+                user["id"], deck_item.level, deck_item.content_id, now_utc=now_utc
+            )
             await ctx.repositories.session_state.increment_correct(state.session_id)
             await ctx.session_service.advance_item(state.session_id)
             await message.answer("✅ Добре!")
         else:
             await ctx.repositories.session_state.increment_wrong_total(state.session_id)
-            for cid in _pair_components(deck_item.content_id):
-                await ctx.repositories.item_progress.record_wrong(user["id"], deck_item.level, cid, now_utc=now_utc)
+            await ctx.repositories.item_progress.record_wrong(
+                user["id"], deck_item.level, deck_item.content_id, now_utc=now_utc
+            )
             attempts = state.current_attempts + 1
             if attempts >= 5:
                 await message.answer("Йдемо далі")
@@ -328,6 +323,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
             return
         processed = updated_state.item_index
 
+        # Freecare: after BOTH words are read correctly, unlock one care choice.
         if updated_state.mode == "freecare" and processed >= updated_state.total_items and updated_state.care_stage < 1:
             options, _, need_state = await _schedule_care(user["id"], updated_state)
             pet = await ctx.pet_service.rollover_if_needed(user["id"])
@@ -339,6 +335,8 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 reply_markup=care_inline_kb(options),
             )
             return
+
+        # Otherwise (word #1 done but word #2 not yet), continue by sending the next word normally.
 
         if updated_state.mode == "normal" and processed in (5, 10) and updated_state.care_stage < (1 if processed == 5 else 2):
             options, _, need_state = await _schedule_care(user["id"], updated_state)
