@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -290,7 +289,6 @@ class SessionService:
             chosen.add((item.level, item.content_id))
 
         def add_items(item_level: int, items: list[ContentItem]) -> None:
-            random.shuffle(items)
             for itm in items:
                 if len(deck) >= total_items:
                     break
@@ -302,23 +300,13 @@ class SessionService:
                 deck.append(DeckItem(level=item_level, content_id=itm.id))
                 chosen.add(key)
 
-        # Step 2: unfinished items from current level (respect mono/di gating for level 1).
+        # Step 2: unfinished items from current level in CSV order.
         try:
             level_items = self.content_service.get_level_items(current_level)
         except FileNotFoundError:
             level_items = []
-        if current_level == 1:
-            mono_items = [i for i in level_items if (i.sublevel or "").lower() == "mono"]
-            di_items = [i for i in level_items if (i.sublevel or "").lower() == "di"]
-            unfinished_mono = [i for i in mono_items if not is_finished(1, i.id)]
-            if unfinished_mono:
-                add_items(1, unfinished_mono)
-            if len(deck) < total_items:
-                unfinished_di = [i for i in di_items if not is_finished(1, i.id)]
-                add_items(1, unfinished_di or di_items)
-        else:
-            unfinished = [i for i in level_items if not is_finished(current_level, i.id)]
-            add_items(current_level, unfinished or level_items)
+        unfinished = [i for i in level_items if not is_finished(current_level, i.id)]
+        add_items(current_level, unfinished or level_items)
 
         # Step 3: any unfinished items from other levels.
         for lvl in self.content_service.available_levels():
