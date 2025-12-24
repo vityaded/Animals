@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -101,22 +100,9 @@ class ContentService:
         if passed_ids is None:
             passed_ids = self._load_progress_map(user_id, level, progress_path)
 
-        candidates = items
-        if level == 1:
-            mono = [i for i in items if (i.sublevel or "").lower() == "mono"]
-            di = [i for i in items if (i.sublevel or "").lower() == "di"]
-            mono_unpassed = [i for i in mono if i.id not in passed_ids]
-            if mono_unpassed:
-                candidates = mono_unpassed
-            else:
-                di_unpassed = [i for i in di if i.id not in passed_ids]
-                candidates = di_unpassed or di or mono
-        else:
-            unpassed = [i for i in items if i.id not in passed_ids]
-            candidates = unpassed or items
-
-        random.shuffle(candidates)
-        deck = [item.id for item in candidates[:size]]
+        unpassed = [i for i in items if i.id not in passed_ids]
+        candidates = unpassed or items
+        deck = [item.id for item in candidates[:size]]  # preserves CSV order
         return deck
 
     def resolve_pet_asset(self, state: str) -> PetAsset:
