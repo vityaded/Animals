@@ -151,15 +151,6 @@ def setup_voice_router(ctx: AppContext) -> Router:
         )
         return choices, active_need, need_state
 
-    def _two_word_candidates(level: int) -> list[str]:
-        items = ctx.content_service.list_items(level)
-        out: list[str] = []
-        for it in items:
-            tokens = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", it.text.strip())
-            if len(tokens) == 2:
-                out.append(it.id)
-        return out
-
     @router.callback_query(F.data == "care_more")
     async def on_care_more(callback: types.CallbackQuery) -> None:
         user = await ctx.repositories.users.get_user(callback.from_user.id)
@@ -181,19 +172,30 @@ def setup_voice_router(ctx: AppContext) -> Router:
             return
 
         user_level = int(user.get("current_level", 1))
-        chosen_level = None
-        chosen_id = None
-        for lvl in [user_level, 1, 2, 3]:
-            ids = _two_word_candidates(lvl)
-            if ids:
-                chosen_level = lvl
-                chosen_id = random.choice(ids)
+        # Build an ordered candidate list (due first, then current level in CSV order, then higher levels).
+        candidate_deck = await ctx.session_service.build_deck(
+            user["id"], user_level, total_items=50
+        )
+        chosen = None
+        for d in candidate_deck:
+            try:
+                it = ctx.content_service.get_item(d.level, d.content_id)
+            except Exception:
+                continue
+            tokens = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", it.text.strip())
+            if len(tokens) == 2:
+                chosen = d
                 break
-        if not chosen_id or not chosen_level:
+
+        if not chosen:
             await callback.answer("Немає коротких карток (2 слова).", show_alert=True)
             return
 
-        await ctx.session_service.start_freecare_gate(user_id=user["id"], level=chosen_level, content_id=chosen_id)
+        await ctx.session_service.start_freecare_gate(
+            user_id=user["id"],
+            level=chosen.level,
+            content_id=chosen.content_id,
+        )
         state = await ctx.session_service.get_active_session(user["id"])
         if state:
             await _send_task(callback.message, state)

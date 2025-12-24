@@ -78,6 +78,13 @@ class UserRepository:
             row = await cursor.fetchone()
             return _row_to_dict(row)
 
+    async def set_current_level(self, user_id: int, level: int) -> None:
+        async with self.database.connect() as conn:
+            await conn.execute(
+                "UPDATE users SET current_level=? WHERE id=?", (int(level), int(user_id))
+            )
+            await conn.commit()
+
 
 class SessionRepository:
     def __init__(self, database: Database):
