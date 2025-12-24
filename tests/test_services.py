@@ -131,3 +131,16 @@ def test_speech_service_threshold():
     _, score, ok = service._evaluate_transcript(transcript, "good morning||hello world", threshold=80)
     assert score >= 90
     assert ok is True
+
+
+
+def test_speech_service_relaxed_close_phonemes_vowels():
+    service = SpeechService("base", load_model=False)
+    # long/short vowel close pairs should be accepted by phonetic scoring
+    _, score1, ok1 = service._evaluate_transcript("sheep", "ship", threshold=80)
+    assert ok1 is True
+    assert score1 >= 80
+
+    _, score2, ok2 = service._evaluate_transcript("fool", "full", threshold=80)
+    assert ok2 is True
+    assert score2 >= 80
