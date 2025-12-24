@@ -25,17 +25,21 @@ class TaskPresenter:
         self.text_img_cache_dir = resolve_project_path(text_img_cache_dir)
         self.text_card_width = text_card_width
 
-    async def _resolve_audio(self, item: ContentItem) -> Path:
+    async def _resolve_audio(self, item: ContentItem) -> Path | None:
+        clean_text = " ".join(item.text.split()).strip()
         if item.sound:
             sound_path = Path(item.sound)
             if not sound_path.is_absolute():
                 candidate = self.assets_root / item.sound
                 if candidate.exists():
-                    return candidate
-                sound_path = Path(item.sound)
-            if sound_path.exists():
+                    if candidate.stat().st_size > 0:
+                        return candidate
+                    sound_path = candidate
+            if sound_path.exists() and sound_path.stat().st_size > 0:
                 return sound_path
-        return await self.tts_service.ensure_voice(item.text)
+        if not clean_text:
+            return None
+        return await self.tts_service.ensure_voice(clean_text)
 
     def _resolve_image(self, item: ContentItem) -> Path | None:
         if not item.image:
