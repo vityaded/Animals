@@ -50,4 +50,13 @@ def setup_start_router(ctx: AppContext) -> Router:
         await ctx.repositories.reset_all()
         await message.answer("OK. Database cleared.")
 
+    @router.message(Command("reset_me"))
+    async def cmd_reset_me(message: types.Message) -> None:
+        user = await ctx.repositories.users.get_user(message.from_user.id)
+        if not user:
+            await message.answer("Спочатку надішліть /start")
+            return
+        await ctx.repositories.reset_user(user["id"])
+        await message.answer("Дані очищено. Надішли /start, щоб почати заново.")
+
     return router
