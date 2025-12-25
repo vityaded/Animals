@@ -19,7 +19,6 @@ class Config:
     pets_assets_root: Path
     whisper_model: str
     session_times: List[str]
-    reminder_minutes_before: int
     deadline_minutes_after: int
     timezone: ZoneInfo
     admin_telegram_ids: set[int]
@@ -31,7 +30,6 @@ class Config:
         pets_assets_root = Path(os.getenv("PETS_ASSETS_ROOT", "assets/pets"))
         whisper_model = os.getenv("WHISPER_MODEL", "base")
         session_times = [time.strip() for time in os.getenv("SESSION_TIMES", "09:00,18:00").split(",") if time.strip()]
-        reminder_minutes_before = int(os.getenv("REMINDER_MINUTES_BEFORE", "30"))
         deadline_minutes_after = int(os.getenv("DEADLINE_MINUTES_AFTER", "90"))
         timezone = ZoneInfo(os.getenv("TIMEZONE", "Europe/Kyiv"))
         admin_env = os.getenv("ADMIN_TELEGRAM_IDS", "")
@@ -50,7 +48,6 @@ class Config:
             pets_assets_root=pets_assets_root,
             whisper_model=whisper_model,
             session_times=session_times,
-            reminder_minutes_before=reminder_minutes_before,
             deadline_minutes_after=deadline_minutes_after,
             timezone=timezone,
             admin_telegram_ids=admin_ids,

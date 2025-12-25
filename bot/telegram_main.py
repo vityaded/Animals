@@ -71,16 +71,6 @@ async def main() -> None:
     dp.include_router(setup_session_router(ctx))
     dp.include_router(setup_voice_router(ctx))
 
-    async def on_reminder(label: str, when) -> None:
-        users = await repositories.user_settings.users_with_notifications()
-        for settings in users:
-            user = await repositories.users.get_user_by_id(settings["user_id"])
-            if user:
-                try:
-                    await bot.send_message(user["telegram_id"], f"Нагадування про сесію о {label}")
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Failed to send reminder to %s: %s", user["telegram_id"], exc)
-
     async def on_deadline(label: str, when) -> None:
         now = when
         active_sessions = await repositories.sessions.get_active_sessions(now)
@@ -99,10 +89,8 @@ async def main() -> None:
 
     scheduler = ReminderScheduler(
         session_times=config.session_times,
-        reminder_minutes_before=config.reminder_minutes_before,
         deadline_minutes_after=config.deadline_minutes_after,
         timezone=config.timezone,
-        on_reminder=on_reminder,
         on_deadline=on_deadline,
     )
     await scheduler.start()

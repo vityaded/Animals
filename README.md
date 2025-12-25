@@ -1,6 +1,6 @@
 # Animals Bot
 
-Прототип голосового тренажера для взаємодії з домашнім улюбленцем через телеграм-бота. Архітектура рознесена на хендлери, сервіси, сховище та планувальник нагадувань.
+Прототип голосового тренажера для взаємодії з домашнім улюбленцем через телеграм-бота. Архітектура рознесена на хендлери, сервіси, сховище та планувальник сесій.
 
 ## Залежності
 - Python 3.11+
@@ -43,7 +43,6 @@ DATABASE_PATH=bot.sqlite
 PETS_ASSETS_ROOT=assets/pets
 WHISPER_MODEL=base
 SESSION_TIMES=09:00,18:00
-REMINDER_MINUTES_BEFORE=30
 DEADLINE_MINUTES_AFTER=90
 TIMEZONE=Europe/Helsinki
 ```
@@ -62,7 +61,7 @@ python -m bot.telegram_main
 ```
 
 ## Планувальник
-`bot/scheduler/scheduler.py` планує дві сесії на день (часи беруться з `SESSION_TIMES`) та генерує нагадування за `REMINDER_MINUTES_BEFORE` хвилин до старту й дедлайни через `DEADLINE_MINUTES_AFTER` хвилин після початку.
+`bot/scheduler/scheduler.py` планує дві сесії на день (часи беруться з `SESSION_TIMES`) та генерує дедлайни через `DEADLINE_MINUTES_AFTER` хвилин після початку.
 
 ## Структура контенту
 - Рівні: `content/levels/level1.csv`, `level2.csv`, `level3.csv`

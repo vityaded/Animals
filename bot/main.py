@@ -33,18 +33,13 @@ async def main() -> None:
     health_service = HealthService(repositories.health, repositories.revive)
     speech_service = SpeechService(config.whisper_model)
 
-    async def on_reminder(label: str, when) -> None:
-        logger.info("Нагадування про сесію %s о %s", label, when.isoformat())
-
     async def on_deadline(label: str, when) -> None:
         logger.warning("Дедлайн сесії %s о %s", label, when.isoformat())
 
     scheduler = ReminderScheduler(
         session_times=config.session_times,
-        reminder_minutes_before=config.reminder_minutes_before,
         deadline_minutes_after=config.deadline_minutes_after,
         timezone=config.timezone,
-        on_reminder=on_reminder,
         on_deadline=on_deadline,
     )
     await scheduler.start()
