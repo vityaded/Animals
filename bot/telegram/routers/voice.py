@@ -177,7 +177,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
 
         def is_finished(cid: str) -> bool:
             meta = progress.get((level, cid))
-            return bool(meta and meta["review_stage"] == 3)
+            return bool(meta and meta["review_stage"] == 3 and meta["next_due_at"] is None)
 
         def is_due(cid: str) -> bool:
             meta = progress.get((level, cid))
