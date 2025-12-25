@@ -197,3 +197,55 @@ async def test_deck_is_consecutive_and_levels_advance():
 
         u = await repos.users.get_user_by_id(user_id)
         assert int(u["current_level"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_wrong_after_completion_prevents_auto_advance():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
+        await db.ensure_schema()
+        repos = RepositoryProvider.build(db)
+
+        levels_dir = tmp_path / "levels"
+        levels_dir.mkdir()
+        (levels_dir / "level1.csv").write_text(
+            "id,text,sound,image\n"
+            "a1,cat,,\n"
+            "a2,dog,,\n",
+            encoding="utf-8",
+        )
+        (levels_dir / "level2.csv").write_text(
+            "id,text,sound,image\n"
+            "b1,a red ball,,\n",
+            encoding="utf-8",
+        )
+        content = ContentService(levels_dir)
+        session_service = SessionService(repos, content)
+
+        user_id = await repos.users.upsert_user(2, "tester2")
+        base = datetime.now(timezone.utc) - timedelta(days=4)
+        for cid in ["a1", "a2"]:
+            await repos.item_progress.record_correct(user_id, 1, cid, now_utc=base)
+            await repos.item_progress.record_correct(user_id, 1, cid, now_utc=base + timedelta(seconds=1))
+            await repos.item_progress.record_correct(
+                user_id, 1, cid, now_utc=base + timedelta(minutes=11)
+            )
+            await repos.item_progress.record_correct(
+                user_id, 1, cid, now_utc=base + timedelta(days=3)
+            )
+
+        await repos.item_progress.record_wrong(
+            user_id,
+            1,
+            "a1",
+            now_utc=base + timedelta(days=3, seconds=5),
+        )
+        row = await repos.item_progress.get_progress(user_id, 1, "a1")
+        assert row["review_stage"] < 3
+
+        deck = await session_service.build_deck(user_id, current_level=1, total_items=2)
+        assert any(item.content_id == "a1" for item in deck)
+
+        u = await repos.users.get_user_by_id(user_id)
+        assert int(u["current_level"]) == 1

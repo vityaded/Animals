@@ -651,17 +651,21 @@ class ItemProgressRepository:
             )
             row = await row_cursor.fetchone()
             review_stage = int(row["review_stage"]) if row and row["review_stage"] is not None else 0
-            if review_stage >= 1:
+            if review_stage > 0:
+                review_stage = max(0, review_stage - 1)
+            if review_stage >= 2:
+                next_due_at = now_utc + timedelta(days=2)
+            elif review_stage == 1:
                 next_due_at = now_utc + timedelta(minutes=10)
             else:
                 next_due_at = now_utc + timedelta(minutes=2)
             await conn.execute(
                 """
                 UPDATE item_progress
-                SET next_due_at=?, last_seen_at=?
+                SET review_stage=?, next_due_at=?, last_seen_at=?
                 WHERE user_id=? AND level=? AND content_id=?
                 """,
-                (next_due_at, now_utc, user_id, level, content_id),
+                (review_stage, next_due_at, now_utc, user_id, level, content_id),
             )
             await conn.commit()
 
