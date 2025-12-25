@@ -70,12 +70,13 @@ class SpeechService:
         actual = self.normalize_text(transcript)
         scores: list[int] = []
 
-        def effective_threshold(ref_norm: str) -> int:
+        def effective_threshold(word_count: int) -> int:
             # Short prompts are harder for ASR; be more forgiving for 1–2 words.
-            wc = len(ref_norm.split())
-            if wc <= 2:
+            if word_count <= 0:
+                return threshold
+            if word_count <= 2:
                 return max(55, threshold - 15)
-            if wc <= 4:
+            if word_count <= 4:
                 return max(60, threshold - 8)
             return threshold
 
@@ -169,5 +170,5 @@ class SpeechService:
             r = self.normalize_text(ref)
             if not r:
                 continue
-            eff = min(eff, effective_threshold(r))
+            eff = min(eff, effective_threshold(len(r.split())))
         return transcript, max_score, max_score >= eff
