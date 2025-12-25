@@ -33,6 +33,7 @@ def _build_content(tmpdir: Path) -> ContentService:
 
 @pytest.mark.asyncio
 async def test_spaced_repetition_progression():
+    """Advance spaced repetition stages and verify next due timestamps."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
@@ -71,6 +72,7 @@ async def test_spaced_repetition_progression():
 
 @pytest.mark.asyncio
 async def test_care_stage_and_bonus_and_rollover():
+    """Exercise care checkpoints, pet bonuses, and rollover death logic."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
@@ -126,6 +128,7 @@ async def test_care_stage_and_bonus_and_rollover():
 
 
 def test_speech_service_threshold():
+    """Validate transcript scoring meets a strict threshold."""
     service = SpeechService("base", load_model=False)
     transcript = "good morning dear friend"
     _, score, ok = service._evaluate_transcript(transcript, "good morning||hello world", threshold=80)
@@ -135,6 +138,7 @@ def test_speech_service_threshold():
 
 
 def test_speech_service_relaxed_close_phonemes_vowels():
+    """Accept close vowel phonemes with relaxed phonetic scoring."""
     service = SpeechService("base", load_model=False)
     # long/short vowel close pairs should be accepted by phonetic scoring
     _, score1, ok1 = service._evaluate_transcript("sheep", "ship", threshold=80)
@@ -148,6 +152,7 @@ def test_speech_service_relaxed_close_phonemes_vowels():
 
 @pytest.mark.asyncio
 async def test_deck_is_consecutive_and_levels_advance():
+    """Build decks in order and confirm level advancement after mastery."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
@@ -201,6 +206,7 @@ async def test_deck_is_consecutive_and_levels_advance():
 
 @pytest.mark.asyncio
 async def test_wrong_after_completion_prevents_auto_advance():
+    """Prevent auto-advance when a previously completed item is missed."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
@@ -253,6 +259,7 @@ async def test_wrong_after_completion_prevents_auto_advance():
 
 @pytest.mark.asyncio
 async def test_review_stage_three_with_due_date_is_not_finished():
+    """Treat stage-three items with future due dates as unfinished."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
