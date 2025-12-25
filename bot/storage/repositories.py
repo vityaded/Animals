@@ -732,3 +732,27 @@ class RepositoryProvider:
                 await conn.execute("VACUUM")
             finally:
                 await conn.execute("PRAGMA foreign_keys=ON")
+
+    async def reset_user(self, user_id: int) -> None:
+        async with self.database.connect() as conn:
+            await conn.execute("PRAGMA foreign_keys=OFF")
+            try:
+                await conn.execute("BEGIN")
+                try:
+                    await conn.execute("DELETE FROM attempts WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM session_state WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM level_progress WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM daily_stats WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM health WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM revive WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM user_settings WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM pets WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM item_progress WHERE user_id=?", (user_id,))
+                    await conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+                    await conn.commit()
+                except Exception:
+                    await conn.rollback()
+                    raise
+            finally:
+                await conn.execute("PRAGMA foreign_keys=ON")

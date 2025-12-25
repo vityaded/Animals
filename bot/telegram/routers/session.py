@@ -106,4 +106,21 @@ def setup_session_router(ctx: AppContext) -> Router:
         level = int(command.args) if command.args and command.args.isdigit() else 1
         await start_or_continue(ctx, message, level=level)
 
+    @router.message(Command("next_session"))
+    async def cmd_next_session(message: types.Message) -> None:
+        user = await ctx.repositories.users.get_user(message.from_user.id)
+        if not user:
+            await message.answer("Спочатку натисни /start")
+            return
+        state = await ctx.session_service.get_active_session(user["id"])
+        if state:
+            await ctx.session_service.complete_session(
+                state.session_id,
+                user["id"],
+                state.level,
+                state.correct_count,
+                state.total_items,
+            )
+        await start_or_continue(ctx, message, level=None, user_id=message.from_user.id)
+
     return router
