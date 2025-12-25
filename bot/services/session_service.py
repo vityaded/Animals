@@ -266,7 +266,7 @@ class SessionService:
 
         def is_finished(level: int, content_id: str) -> bool:
             row = progress_map.get((level, content_id))
-            return bool(row and row.get("review_stage") == 3)
+            return bool(row and row.get("review_stage") == 3 and row.get("next_due_at") is None)
 
         # Auto-advance: if the whole level is finished, move to the next level.
         levels = self.content_service.available_levels()

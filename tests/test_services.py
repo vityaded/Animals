@@ -249,3 +249,48 @@ async def test_wrong_after_completion_prevents_auto_advance():
 
         u = await repos.users.get_user_by_id(user_id)
         assert int(u["current_level"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_review_stage_three_with_due_date_is_not_finished():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        db = Database(tmp_path / "test.sqlite", Path("bot/storage/schema.sql"))
+        await db.ensure_schema()
+        repos = RepositoryProvider.build(db)
+
+        levels_dir = tmp_path / "levels"
+        levels_dir.mkdir()
+        (levels_dir / "level1.csv").write_text(
+            "id,text,sound,image\n"
+            "a1,cat,,\n",
+            encoding="utf-8",
+        )
+        (levels_dir / "level2.csv").write_text(
+            "id,text,sound,image\n"
+            "b1,a red ball,,\n",
+            encoding="utf-8",
+        )
+        content = ContentService(levels_dir)
+        session_service = SessionService(repos, content)
+
+        user_id = await repos.users.upsert_user(3, "tester3")
+        base = datetime.now(timezone.utc) - timedelta(days=4)
+        await repos.item_progress.record_correct(user_id, 1, "a1", now_utc=base)
+        await repos.item_progress.record_correct(user_id, 1, "a1", now_utc=base + timedelta(seconds=1))
+        await repos.item_progress.record_correct(user_id, 1, "a1", now_utc=base + timedelta(minutes=11))
+        await repos.item_progress.record_correct(user_id, 1, "a1", now_utc=base + timedelta(days=3))
+
+        future_due = datetime.now(timezone.utc) + timedelta(days=1)
+        async with db.connect() as conn:
+            await conn.execute(
+                "UPDATE item_progress SET next_due_at=? WHERE user_id=? AND level=? AND content_id=?",
+                (future_due, user_id, 1, "a1"),
+            )
+            await conn.commit()
+
+        deck = await session_service.build_deck(user_id, current_level=1, total_items=1)
+        assert [item.content_id for item in deck] == ["a1"]
+
+        user_row = await repos.users.get_user_by_id(user_id)
+        assert int(user_row["current_level"]) == 1
