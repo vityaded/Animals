@@ -10,7 +10,6 @@ from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
-ReminderCallback = Callable[[str, datetime], Awaitable[None]]
 DeadlineCallback = Callable[[str, datetime], Awaitable[None]]
 
 
@@ -18,24 +17,19 @@ DeadlineCallback = Callable[[str, datetime], Awaitable[None]]
 class ScheduledEvent:
     name: str
     when: datetime
-    kind: str  # reminder | deadline
 
 
 class ReminderScheduler:
     def __init__(
         self,
         session_times: Iterable[str],
-        reminder_minutes_before: int,
         deadline_minutes_after: int,
         timezone: ZoneInfo,
-        on_reminder: Optional[ReminderCallback] = None,
         on_deadline: Optional[DeadlineCallback] = None,
     ):
         self.session_times = list(session_times)
-        self.reminder_delta = timedelta(minutes=reminder_minutes_before)
         self.deadline_delta = timedelta(minutes=deadline_minutes_after)
         self.timezone = timezone
-        self.on_reminder = on_reminder or self._log_event
         self.on_deadline = on_deadline or self._log_event
         self._task: Optional[asyncio.Task] = None
 
@@ -59,10 +53,7 @@ class ReminderScheduler:
                 continue
             sleep_seconds = max(0, (next_event.when - now).total_seconds())
             await asyncio.sleep(sleep_seconds)
-            if next_event.kind == "reminder":
-                await self.on_reminder(next_event.name, next_event.when)
-            else:
-                await self.on_deadline(next_event.name, next_event.when)
+            await self.on_deadline(next_event.name, next_event.when)
 
     def _next_event(self, now: datetime) -> Optional[ScheduledEvent]:
         events: list[ScheduledEvent] = []
@@ -71,10 +62,8 @@ class ReminderScheduler:
             session_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if session_dt <= now:
                 session_dt += timedelta(days=1)
-            reminder_time = session_dt - self.reminder_delta
             deadline_time = session_dt + self.deadline_delta
-            events.append(ScheduledEvent(name=time_str, when=reminder_time, kind="reminder"))
-            events.append(ScheduledEvent(name=time_str, when=deadline_time, kind="deadline"))
+            events.append(ScheduledEvent(name=time_str, when=deadline_time))
         if not events:
             return None
         return min(events, key=lambda e: e.when)
