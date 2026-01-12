@@ -166,6 +166,10 @@ class SessionService:
         row = await self.repositories.session_state.get_active_state_for_user(user_id)
         return SessionState.from_row(row) if row else None
 
+    async def get_session_for_user(self, session_id: int, user_id: int) -> Optional[SessionState]:
+        row = await self.repositories.session_state.get_state_for_user_session(user_id, session_id)
+        return SessionState.from_row(row) if row else None
+
     async def get_current_item(self, deck_item: DeckItem) -> ContentItem:
         return self.content_service.get_item(deck_item.level, deck_item.content_id)
 

@@ -1,21 +1,55 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from aiogram import F, Router, types
 from aiogram.filters import Command, CommandObject
 from bot.telegram import AppContext
-from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, repeat_inline_kb
+from bot.telegram.keyboards import BTN_CARE, care_inline_kb, choose_pet_inline_kb, main_menu_kb, repeat_inline_kb
 from bot.telegram.media_utils import answer_photo_or_text
+
+
+logger = logging.getLogger(__name__)
 
 
 async def _send_current_task(ctx: AppContext, message: types.Message, state) -> None:
     current = state.current_item()
     if not current:
-        await message.answer("Немає карток для показу.")
+        if state.item_index >= state.total_items:
+            await ctx.session_service.finish_if_needed(state.session_id, state.user_id, state.level)
+            await message.answer("Сесію завершено. Натисни «Піклуватися», щоб почати знову.", reply_markup=main_menu_kb())
+            return
+        deck = await ctx.session_service.build_deck(state.user_id, state.level, max(1, state.total_items))
+        if not deck:
+            await ctx.session_service.finish_if_needed(state.session_id, state.user_id, state.level)
+            await message.answer("Контент недоступний. Натисни «Піклуватися», щоб спробувати ще раз.", reply_markup=main_menu_kb())
+            return
+        new_index = min(state.item_index, max(0, len(deck) - 1))
+        await ctx.repositories.session_state.update_deck(
+            state.session_id, json.dumps([item.to_dict() for item in deck], ensure_ascii=False), len(deck)
+        )
+        await ctx.repositories.session_state.update_index(state.session_id, new_index)
+        state = await ctx.session_service.get_active_session(state.user_id)
+        if not state or not state.current_item():
+            await message.answer("Контент недоступний. Натисни «Піклуватися», щоб спробувати ще раз.", reply_markup=main_menu_kb())
+            return
+        current = state.current_item()
+    try:
+        item = await ctx.session_service.get_current_item(current)
+    except (KeyError, FileNotFoundError) as exc:
+        logger.warning("Missing content item for session %s: %s", state.session_id, exc)
+        await ctx.session_service.advance_item(state.session_id)
+        updated = await ctx.session_service.get_active_session(state.user_id)
+        if not updated:
+            return
+        if updated.item_index >= updated.total_items:
+            await ctx.session_service.finish_if_needed(updated.session_id, updated.user_id, updated.level)
+            await message.answer("Сесію завершено. Натисни «Піклуватися», щоб почати знову.", reply_markup=main_menu_kb())
+            return
+        await _send_current_task(ctx, message, updated)
         return
-    item = await ctx.session_service.get_current_item(current)
-    await ctx.task_presenter.send_listen_and_read(message, item, reply_markup=repeat_inline_kb())
+    await ctx.task_presenter.send_listen_and_read(message, item, reply_markup=repeat_inline_kb(state.session_id))
 
 
 async def start_or_continue(
@@ -29,11 +63,19 @@ async def start_or_continue(
 
     pet_row = await ctx.repositories.pets.load_pet(user["id"])
     if pet_row is None:
-        await message.answer(
-            "Спочатку обери тваринку:",
-            reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
-        )
-        return
+        pet_types = ctx.pet_service.available_pet_types()
+        if not pet_types:
+            await ctx.pet_service.ensure_pet(user["id"], default_pet="panda")
+            await message.answer(
+                "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                reply_markup=main_menu_kb(),
+            )
+        else:
+            await message.answer(
+                "Спочатку обери тваринку:",
+                reply_markup=choose_pet_inline_kb(pet_types),
+            )
+            return
 
     pet = await ctx.pet_service.rollover_if_needed(user["id"])
     state = await ctx.session_service.get_active_session(user["id"])
@@ -69,7 +111,7 @@ async def start_or_continue(
                 message,
                 img,
                 "Подбай про тваринку:",
-                reply_markup=care_inline_kb(options),
+                reply_markup=care_inline_kb(options, state.session_id),
             )
             return
         await _send_current_task(ctx, message, state)

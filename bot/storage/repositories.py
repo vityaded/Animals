@@ -11,6 +11,8 @@ import aiosqlite
 
 from bot.storage import migrations
 
+_UNSET = object()
+
 
 def _row_to_dict(row: aiosqlite.Row | None) -> Optional[dict]:
     return dict(row) if row is not None else None
@@ -198,6 +200,20 @@ class SessionStateRepository:
             row = await cursor.fetchone()
             return _row_to_dict(row)
 
+    async def get_state_for_user_session(self, user_id: int, session_id: int) -> Optional[dict]:
+        async with self.database.connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT ss.* FROM session_state ss
+                JOIN sessions s ON ss.session_id = s.id
+                WHERE ss.user_id=? AND ss.session_id=? AND ss.blocked=0 AND s.status IN ('pending','active')
+                LIMIT 1
+                """,
+                (user_id, session_id),
+            )
+            row = await cursor.fetchone()
+            return _row_to_dict(row)
+
     async def get_active_state_for_user(self, user_id: int) -> Optional[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
@@ -284,14 +300,14 @@ class SessionStateRepository:
         session_id: int,
         awaiting_care: int,
         care_stage: Optional[int] = None,
-        care_json: Optional[str] = None,
+        care_json: object = _UNSET,
     ) -> None:
         updates = ["awaiting_care=?"]
         values: list[object] = [awaiting_care]
         if care_stage is not None:
             updates.append("care_stage=?")
             values.append(care_stage)
-        if care_json is not None:
+        if care_json is not _UNSET:
             updates.append("care_json=?")
             values.append(care_json)
         values.append(session_id)

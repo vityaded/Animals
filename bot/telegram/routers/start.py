@@ -10,16 +10,25 @@ from bot.telegram.keyboards import choose_pet_inline_kb, main_menu_kb
 def setup_start_router(ctx: AppContext) -> Router:
     router = Router()
 
+    async def _ensure_pet_selection(message: types.Message, user_id: int) -> bool:
+        pet_types = ctx.pet_service.available_pet_types()
+        if not pet_types:
+            await ctx.pet_service.ensure_pet(user_id, default_pet="panda")
+            await message.answer(
+                "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                reply_markup=main_menu_kb(),
+            )
+            return True
+        await message.answer("Обери свою тваринку:", reply_markup=choose_pet_inline_kb(pet_types))
+        return False
+
     @router.message(CommandStart())
     async def cmd_start(message: types.Message) -> None:
         user_id = await ctx.repositories.users.upsert_user(message.from_user.id, message.from_user.username)
         await ctx.repositories.user_settings.ensure_settings(user_id, timezone=ctx.timezone)
         existing_pet = await ctx.repositories.pets.load_pet(user_id)
         if existing_pet is None:
-            await message.answer(
-                "Обери свою тваринку:",
-                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
-            )
+            await _ensure_pet_selection(message, user_id)
             return
         await ctx.pet_service.rollover_if_needed(user_id)
         await message.answer(

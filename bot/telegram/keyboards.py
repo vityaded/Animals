@@ -39,13 +39,15 @@ def session_inline_kb() -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def repeat_inline_kb() -> types.InlineKeyboardMarkup:
-    keyboard = [[types.InlineKeyboardButton(text="🔁 Повторити", callback_data="repeat:current")]]
+def repeat_inline_kb(session_id: int | None = None) -> types.InlineKeyboardMarkup:
+    callback = f"repeat:{session_id}" if session_id is not None else "repeat:current"
+    keyboard = [[types.InlineKeyboardButton(text="🔁 Повторити", callback_data=callback)]]
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def care_more_inline_kb() -> types.InlineKeyboardMarkup:
-    keyboard = [[types.InlineKeyboardButton(text="➕ Попіклуватися ще", callback_data="care_more")]]
+def care_more_inline_kb(session_id: int | None = None) -> types.InlineKeyboardMarkup:
+    callback = f"care_more:{session_id}" if session_id is not None else "care_more"
+    keyboard = [[types.InlineKeyboardButton(text="➕ Попіклуватися ще", callback_data=callback)]]
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -59,9 +61,10 @@ CARE_LABELS = {
 }
 
 
-def care_inline_kb(options: list[str]) -> types.InlineKeyboardMarkup:
+def care_inline_kb(options: list[str], session_id: int | None = None) -> types.InlineKeyboardMarkup:
+    prefix = f"care:{session_id}:" if session_id is not None else "care:"
     buttons = [
-        types.InlineKeyboardButton(text=CARE_LABELS.get(opt, opt), callback_data=f"care:{opt}") for opt in options
+        types.InlineKeyboardButton(text=CARE_LABELS.get(opt, opt), callback_data=f"{prefix}{opt}") for opt in options
     ]
     # Arrange in two rows if needed
     rows: list[list[types.InlineKeyboardButton]] = []

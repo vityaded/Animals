@@ -4,7 +4,7 @@ from aiogram import Router, types
 from aiogram.filters import Command
 
 from bot.telegram import AppContext
-from bot.telegram.keyboards import choose_pet_inline_kb
+from bot.telegram.keyboards import choose_pet_inline_kb, main_menu_kb
 
 
 def setup_menu_router(ctx: AppContext) -> Router:
@@ -25,9 +25,17 @@ def setup_menu_router(ctx: AppContext) -> Router:
         hearts = await ctx.health_service.get_hearts(user["id"])
         pet_row = await ctx.repositories.pets.load_pet(user["id"])
         if pet_row is None:
+            pet_types = ctx.pet_service.available_pet_types()
+            if not pet_types:
+                await ctx.pet_service.ensure_pet(user["id"], default_pet="panda")
+                await message.answer(
+                    "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                    reply_markup=main_menu_kb(),
+                )
+                return
             await message.answer(
                 "Спочатку обери тваринку:",
-                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+                reply_markup=choose_pet_inline_kb(pet_types),
             )
             return
         pet = await ctx.pet_service.rollover_if_needed(user["id"])
