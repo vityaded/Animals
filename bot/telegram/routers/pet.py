@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import FSInputFile
 
 from bot.telegram import AppContext
-from bot.telegram.keyboards import BTN_PET, choose_pet_inline_kb
+from bot.telegram.keyboards import BTN_PET, choose_pet_inline_kb, main_menu_kb
 from bot.telegram.routers.session import start_or_continue
 
 
@@ -64,9 +64,17 @@ def setup_pet_router(ctx: AppContext) -> Router:
         if not user:
             await message.answer("Спочатку /start")
             return
+        pet_types = ctx.pet_service.available_pet_types()
+        if not pet_types:
+            await ctx.pet_service.ensure_pet(user["id"], default_pet="panda")
+            await message.answer(
+                "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                reply_markup=main_menu_kb(),
+            )
+            return
         await message.answer(
             "Обери тваринку:",
-            reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+            reply_markup=choose_pet_inline_kb(pet_types),
         )
 
     @router.callback_query(lambda c: c.data and (c.data.startswith("pick_pet:") or c.data.startswith("pet_choose:")))
@@ -80,6 +88,7 @@ def setup_pet_router(ctx: AppContext) -> Router:
         await ctx.pet_service.choose_pet(user["id"], pet_type)
         await callback.answer()
         await callback.message.answer(f"✅ Обрано: {pet_type}")
+        await callback.message.answer("Натисни «Піклуватися», щоб почати.", reply_markup=main_menu_kb())
         # Start the session flow; it will show the pet card once (avoid duplicate status messages).
         await start_or_continue(ctx, callback.message, level=None, user_id=user["telegram_id"])
 
@@ -91,9 +100,17 @@ def setup_pet_router(ctx: AppContext) -> Router:
             return
         pet_row = await ctx.repositories.pets.load_pet(user["id"])
         if pet_row is None:
+            pet_types = ctx.pet_service.available_pet_types()
+            if not pet_types:
+                await ctx.pet_service.ensure_pet(user["id"], default_pet="panda")
+                await message.answer(
+                    "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                    reply_markup=main_menu_kb(),
+                )
+                return
             await message.answer(
                 "Спочатку обери тваринку:",
-                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+                reply_markup=choose_pet_inline_kb(pet_types),
             )
             return
         await _send_pet_card(message, user["id"])
@@ -106,9 +123,17 @@ def setup_pet_router(ctx: AppContext) -> Router:
             return
         pet_row = await ctx.repositories.pets.load_pet(user["id"])
         if pet_row is None:
+            pet_types = ctx.pet_service.available_pet_types()
+            if not pet_types:
+                await ctx.pet_service.ensure_pet(user["id"], default_pet="panda")
+                await message.answer(
+                    "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                    reply_markup=main_menu_kb(),
+                )
+                return
             await message.answer(
                 "Спочатку обери тваринку:",
-                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+                reply_markup=choose_pet_inline_kb(pet_types),
             )
             return
         await _send_pet_card(message, user["id"])

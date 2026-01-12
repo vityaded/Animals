@@ -170,14 +170,14 @@ class TaskPresenter:
         if card_path:
             prompt_msg = await message.answer_photo(
                 FSInputFile(str(card_path)),
-                caption="<b>Прослухай і прочитай:</b>",
+                caption="<b>Прослухай і прочитай, потім надішли голосову відповідь:</b>",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
         else:
             safe = html.escape(item.text)
             prompt_msg = await message.answer(
-                f"<b>Прослухай і прочитай:</b>\n<b>{safe}</b>",
+                f"<b>Прослухай і прочитай, потім надішли голосову відповідь:</b>\n<b>{safe}</b>",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )

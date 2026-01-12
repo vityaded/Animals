@@ -14,6 +14,7 @@ from bot.telegram.keyboards import (
     care_inline_kb,
     care_more_inline_kb,
     choose_pet_inline_kb,
+    main_menu_kb,
     repeat_inline_kb,
 )
 from bot.telegram.media import answer_photo_safe
@@ -36,21 +37,82 @@ def setup_voice_router(ctx: AppContext) -> Router:
             return None, None
         pet_row = await ctx.repositories.pets.load_pet(user["id"])
         if pet_row is None:
-            await message.answer(
-                "Спочатку обери тваринку:",
-                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
-            )
-            return None, None
+            pet_types = ctx.pet_service.available_pet_types()
+            if not pet_types:
+                await ctx.pet_service.ensure_pet(user["id"], default_pet="panda")
+                await message.answer(
+                    "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                    reply_markup=main_menu_kb(),
+                )
+            else:
+                await message.answer(
+                    "Спочатку обери тваринку:",
+                    reply_markup=choose_pet_inline_kb(pet_types),
+                )
+                return None, None
         state = await ctx.session_service.get_active_session(user["id"])
         return user, state
 
     async def _send_task(message: types.Message, state) -> None:
         deck_item = state.current_item()
         if not deck_item:
-            await message.answer("Немає активної картки.")
+            if state.item_index >= state.total_items:
+                await _finalize_session(message, state, state.wrong_total)
+                return
+            deck = await ctx.session_service.build_deck(state.user_id, state.level, max(1, state.total_items))
+            if not deck:
+                await message.answer(
+                    "Контент недоступний. Натисни «Піклуватися», щоб спробувати ще раз.",
+                    reply_markup=main_menu_kb(),
+                )
+                await ctx.session_service.finish_if_needed(state.session_id, state.user_id, state.level)
+                return
+            new_index = min(state.item_index, max(0, len(deck) - 1))
+            await ctx.repositories.session_state.update_deck(
+                state.session_id, json.dumps([item.to_dict() for item in deck], ensure_ascii=False), len(deck)
+            )
+            await ctx.repositories.session_state.update_index(state.session_id, new_index)
+            state = await ctx.session_service.get_active_session(state.user_id)
+            if not state or not state.current_item():
+                await message.answer(
+                    "Контент недоступний. Натисни «Піклуватися», щоб спробувати ще раз.",
+                    reply_markup=main_menu_kb(),
+                )
+                return
+            deck_item = state.current_item()
+        try:
+            item = await ctx.session_service.get_current_item(deck_item)
+        except (KeyError, FileNotFoundError) as exc:
+            logger.warning("Missing content item for session %s: %s", state.session_id, exc)
+            await ctx.session_service.advance_item(state.session_id)
+            updated = await ctx.session_service.get_active_session(state.user_id)
+            if not updated:
+                return
+            if updated.item_index >= updated.total_items:
+                await _finalize_session(message, updated, updated.wrong_total)
+                return
+            await _send_task(message, updated)
             return
-        item = await ctx.session_service.get_current_item(deck_item)
-        await ctx.task_presenter.send_listen_and_read(message, item, reply_markup=repeat_inline_kb())
+        await ctx.task_presenter.send_listen_and_read(message, item, reply_markup=repeat_inline_kb(state.session_id))
+
+    def _parse_care_options(state) -> tuple[list[str], str | None]:
+        options = ["feed", "water", "play"]
+        need_state = None
+        if state.care_json:
+            try:
+                data = json.loads(state.care_json)
+                options = data.get("options", options)
+                need_state = data.get("need_state")
+            except Exception:
+                pass
+        return options, need_state
+
+    async def _send_stale_callback(callback: types.CallbackQuery) -> None:
+        await callback.answer("Сесія вже завершена або недоступна.", show_alert=True)
+        await callback.message.answer(
+            "Натисни «Піклуватися», щоб почати або продовжити.",
+            reply_markup=main_menu_kb(),
+        )
 
     @router.message(Command("stop"))
     async def cmd_stop(message: types.Message) -> None:
@@ -80,7 +142,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 message,
                 img,
                 "✅ Готово!\n" + ctx.pet_service.status_text(pet_now),
-                reply_markup=care_more_inline_kb(),
+                reply_markup=care_more_inline_kb(state.session_id),
             )
         elif state.mode == "revival":
             await ctx.pet_service.revive(state.user_id)
@@ -90,7 +152,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 message,
                 img,
                 "✅ Відновлено!\n" + ctx.pet_service.status_text(pet_now),
-                reply_markup=care_more_inline_kb(),
+                reply_markup=care_more_inline_kb(state.session_id),
             )
         else:
             pet_now = await ctx.pet_service.rollover_if_needed(state.user_id)
@@ -99,7 +161,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 message,
                 img,
                 "✅ Готово!\n" + ctx.pet_service.status_text(pet_now),
-                reply_markup=care_more_inline_kb(),
+                reply_markup=care_more_inline_kb(state.session_id),
             )
 
     def _need_to_action(need_key: str) -> str:
@@ -201,17 +263,33 @@ def setup_voice_router(ctx: AppContext) -> Router:
 
         return None
 
-    @router.callback_query(F.data == "care_more")
+    @router.callback_query(F.data.startswith("care_more"))
     async def on_care_more(callback: types.CallbackQuery) -> None:
         user = await ctx.repositories.users.get_user(callback.from_user.id)
         if not user:
             await callback.answer("/start", show_alert=True)
             return
+        parts = callback.data.split(":", 1)
+        session_id = int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else None
+        if session_id is not None:
+            state = await ctx.session_service.get_session_for_user(session_id, user["id"])
+            if not state:
+                await _send_stale_callback(callback)
+                return
         pet_row = await ctx.repositories.pets.load_pet(user["id"])
         if pet_row is None:
+            pet_types = ctx.pet_service.available_pet_types()
+            if not pet_types:
+                await ctx.pet_service.ensure_pet(user["id"], default_pet="panda")
+                await callback.message.answer(
+                    "Ми обрали для тебе тваринку: Панда 🐼.\nНатисни «Піклуватися», щоб почати.",
+                    reply_markup=main_menu_kb(),
+                )
+                await callback.answer()
+                return
             await callback.message.answer(
                 "Спочатку обери тваринку:",
-                reply_markup=choose_pet_inline_kb(ctx.pet_service.available_pet_types()),
+                reply_markup=choose_pet_inline_kb(pet_types),
             )
             await callback.answer()
             return
@@ -258,7 +336,16 @@ def setup_voice_router(ctx: AppContext) -> Router:
 
         pet = await _ensure_pet(user["id"])
         if state.awaiting_care:
-            await message.answer("Спочатку обери дію для тваринки.")
+            options, need_state = _parse_care_options(state)
+            img = None
+            if need_state:
+                img = ctx.pet_service.asset_path(pet.pet_type, need_state)
+            await answer_photo_or_text(
+                message,
+                img,
+                "Подбай про тваринку:",
+                reply_markup=care_inline_kb(options, state.session_id),
+            )
             return
 
         if pet.is_dead and state.mode != "revival":
@@ -272,11 +359,41 @@ def setup_voice_router(ctx: AppContext) -> Router:
         try:
             deck_item = state.current_item()
             if not deck_item:
-                await message.answer("Картки закінчилися.")
-                return
+                if state.item_index >= state.total_items:
+                    await _finalize_session(message, state, state.wrong_total)
+                    return
+                deck = await ctx.session_service.build_deck(state.user_id, state.level, max(1, state.total_items))
+                if not deck:
+                    await message.answer(
+                        "Контент недоступний. Натисни «Піклуватися», щоб спробувати ще раз.",
+                        reply_markup=main_menu_kb(),
+                    )
+                    await ctx.session_service.finish_if_needed(state.session_id, state.user_id, state.level)
+                    return
+                new_index = min(state.item_index, max(0, len(deck) - 1))
+                await ctx.repositories.session_state.update_deck(
+                    state.session_id, json.dumps([item.to_dict() for item in deck], ensure_ascii=False), len(deck)
+                )
+                await ctx.repositories.session_state.update_index(state.session_id, new_index)
+                state = await ctx.session_service.get_active_session(state.user_id)
+                if not state or not state.current_item():
+                    await message.answer(
+                        "Контент недоступний. Натисни «Піклуватися», щоб спробувати ще раз.",
+                        reply_markup=main_menu_kb(),
+                    )
+                    return
+                deck_item = state.current_item()
             item = await ctx.session_service.get_current_item(deck_item)
-        except Exception:
-            await message.answer("Контент недоступний.")
+        except (KeyError, FileNotFoundError) as exc:
+            logger.warning("Missing content item for session %s: %s", state.session_id, exc)
+            await ctx.session_service.advance_item(state.session_id)
+            updated = await ctx.session_service.get_active_session(state.user_id)
+            if not updated:
+                return
+            if updated.item_index >= updated.total_items:
+                await _finalize_session(message, updated, updated.wrong_total)
+                return
+            await _send_task(message, updated)
             return
 
         transcript, score, ok = await ctx.speech_service.evaluate_async(audio_bytes, item.text)
@@ -332,7 +449,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 message,
                 img,
                 "Подбай про тваринку:",
-                reply_markup=care_inline_kb(options),
+                reply_markup=care_inline_kb(options, updated_state.session_id),
             )
             return
 
@@ -348,7 +465,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 message,
                 img,
                 "Подбай про тваринку:",
-                reply_markup=care_inline_kb(options),
+                reply_markup=care_inline_kb(options, updated_state.session_id),
             )
             return
 
@@ -358,29 +475,60 @@ def setup_voice_router(ctx: AppContext) -> Router:
         else:
             await _send_task(message, updated_state)
 
-    @router.callback_query(F.data == "repeat:current")
+    @router.callback_query(F.data.startswith("repeat:"))
     async def on_repeat(callback: types.CallbackQuery) -> None:
-        user, state = await _load_active(callback.message, telegram_id=callback.from_user.id)
-        if not user or not state:
-            await callback.answer()
-            return
+        session_id = None
+        parts = callback.data.split(":", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            session_id = int(parts[1])
+        if session_id is not None:
+            state = await ctx.session_service.get_session_for_user(session_id, callback.from_user.id)
+            if not state:
+                await _send_stale_callback(callback)
+                return
+            user = await ctx.repositories.users.get_user(callback.from_user.id)
+            if not user:
+                await callback.answer("/start", show_alert=True)
+                return
+        else:
+            user, state = await _load_active(callback.message, telegram_id=callback.from_user.id)
+            if not user or not state:
+                await _send_stale_callback(callback)
+                return
         await _send_task(callback.message, state)
         await callback.answer()
 
     @router.callback_query(F.data.startswith("care:"))
     async def on_care(callback: types.CallbackQuery) -> None:
-        user, state = await _load_active(callback.message, telegram_id=callback.from_user.id)
-        if not user or not state:
-            await callback.answer()
+        parts = callback.data.split(":")
+        action = parts[-1] if parts else ""
+        session_id = None
+        if len(parts) == 3 and parts[1].isdigit():
+            session_id = int(parts[1])
+        if session_id is not None:
+            state = await ctx.session_service.get_session_for_user(session_id, callback.from_user.id)
+            if not state:
+                await _send_stale_callback(callback)
+                return
+            user = await ctx.repositories.users.get_user(callback.from_user.id)
+            if not user:
+                await callback.answer("/start", show_alert=True)
+                return
+        else:
+            user, state = await _load_active(callback.message, telegram_id=callback.from_user.id)
+            if not user or not state:
+                await _send_stale_callback(callback)
+                return
+        if not state.awaiting_care:
+            await _send_stale_callback(callback)
             return
         if not state.care_json:
-            await callback.answer("Сесія недоступна", show_alert=True)
+            await _send_stale_callback(callback)
             return
         try:
             care_data = json.loads(state.care_json)
         except Exception:
             care_data = {}
-        action = callback.data.split(":", 1)[1]
         options = care_data.get("options", [])
         active_need = care_data.get("active_need")
         if action not in options:

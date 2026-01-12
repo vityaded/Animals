@@ -24,6 +24,7 @@ from bot.telegram.routers.session import setup_session_router
 from bot.telegram.routers.start import setup_start_router
 from bot.telegram.routers.voice import setup_voice_router
 from bot.telegram.routers.pet import setup_pet_router
+from bot.telegram.routers.fallback import setup_fallback_router
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ async def main() -> None:
     dp.include_router(setup_menu_router(ctx))
     dp.include_router(setup_session_router(ctx))
     dp.include_router(setup_voice_router(ctx))
+    dp.include_router(setup_fallback_router(ctx))
 
     async def on_deadline(label: str, when) -> None:
         now = when
