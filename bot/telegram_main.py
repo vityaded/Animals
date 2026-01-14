@@ -77,6 +77,8 @@ async def main() -> None:
         now = when
         deadline_sessions = await repositories.sessions.get_deadline_sessions(now)
         for session in deadline_sessions:
+            if session["due_at"] is None:
+                continue
             state = await repositories.session_state.get_state(session["id"])
             if not state or state.get("mode") == "freecare":
                 continue
