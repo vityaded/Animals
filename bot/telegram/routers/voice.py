@@ -8,6 +8,7 @@ from io import BytesIO
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
+from bot.services.session_service import SessionState
 from bot.telegram import AppContext
 from bot.telegram.keyboards import (
     BTN_CARE,
@@ -518,6 +519,16 @@ def setup_voice_router(ctx: AppContext) -> Router:
             if not user:
                 await callback.answer("/start", show_alert=True)
                 return
+            if not state:
+                raw_state = await ctx.repositories.session_state.get_state(session_id)
+                if raw_state and raw_state.get("user_id") == user["id"]:
+                    if raw_state.get("blocked"):
+                        await ctx.session_service.revive_session(session_id)
+                    else:
+                        await ctx.repositories.sessions.update_status(session_id, "active")
+                    state = await ctx.session_service.get_session_for_user(session_id, user["id"])
+                    if not state:
+                        state = SessionState.from_row(raw_state)
             if not state:
                 await _send_stale_callback(callback)
                 return
