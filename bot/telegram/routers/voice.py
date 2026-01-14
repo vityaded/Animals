@@ -109,12 +109,12 @@ def setup_voice_router(ctx: AppContext) -> Router:
         return options, need_state
 
     async def _send_stale_callback(callback: types.CallbackQuery) -> None:
-        await callback.answer("Сесія вже завершена або недоступна.", show_alert=True)
         try:
             if callback.message:
                 await callback.message.edit_reply_markup(reply_markup=None)
         except Exception:
             logger.debug("Failed to clear stale callback buttons.", exc_info=True)
+        await callback.answer("Сесія вже завершена або недоступна.", show_alert=True)
         await start_or_continue(ctx, callback.message, level=None, user_id=callback.from_user.id)
 
     @router.message(Command("stop"))
