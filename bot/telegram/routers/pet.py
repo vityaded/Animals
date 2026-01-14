@@ -26,6 +26,11 @@ def setup_pet_router(ctx: AppContext) -> Router:
         else:
             await msg.answer(text)
 
+    async def _resume_session_if_active(message: types.Message, user_id: int) -> None:
+        state = await ctx.session_service.get_active_session(user_id)
+        if state:
+            await start_or_continue(ctx, message, level=None, user_id=message.from_user.id)
+
     @router.message(Command("debug_pet_assets"))
     async def cmd_debug_pet_assets(message: types.Message) -> None:
         if ctx.admin_ids and message.from_user.id not in ctx.admin_ids:
@@ -114,6 +119,7 @@ def setup_pet_router(ctx: AppContext) -> Router:
             )
             return
         await _send_pet_card(message, user["id"])
+        await _resume_session_if_active(message, user["id"])
 
     @router.message(F.text == BTN_PET)
     async def on_pet_button(message: types.Message) -> None:
@@ -137,5 +143,6 @@ def setup_pet_router(ctx: AppContext) -> Router:
             )
             return
         await _send_pet_card(message, user["id"])
+        await _resume_session_if_active(message, user["id"])
 
     return router
