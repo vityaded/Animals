@@ -1,41 +1,151 @@
-id,text,sound,image
-s001,I have a dog,,
-s002,I have a cat,,
-s003,My pet is happy,,
-s004,My pet is hungry,,
-s005,The dog can run,,
-s006,The cat can jump,,
-s007,The sun is up,,
-s008,The moon is big,,
-s009,I like this book,,
-s010,I can read now,,
-s011,Listen and read,,
-s012,Please read with me,,
-s013,Open the door please,,
-s014,Close the door please,,
-s015,Wash your hands now,,
-s016,Brush your teeth now,,
-s017,Drink some water,,
-s018,Eat the apple,,
-s019,Throw the ball,,
-s020,Catch the ball,,
-s021,Clap your hands,,
-s022,Stamp your feet,,
-s023,Sit down please,,
-s024,Stand up please,,
-s025,Smile at me,,
-s026,Wave to me,,
-s027,Sing a song,,
-s028,Read the next one,,
-s029,Good job keep going,,
-s030,Try again slowly,,
-s031,The panda is sleepy,,
-s032,The fox is playful,,
-s033,The dino is brave,,
-s034,The dog is friendly,,
-s035,We play together,,
-s036,We read together,,
-s037,I can do it,,
-s038,I will try again,,
-s039,Thank you teacher,,
-s040,I love English,,
+id,text,sound,image,sublevel
+s001,I see a cat,,assets/unit_icons/level3/s001.png,P2
+s002,I see a dog,,assets/unit_icons/level3/s002.png,P2
+s003,I have a hat,,assets/unit_icons/level3/s003.png,P2
+s004,I have a bag,,assets/unit_icons/level3/s004.png,P2
+s005,I sit on a bed,,assets/unit_icons/level3/s005.png,P2
+s006,I run to the bus,,assets/unit_icons/level3/s006.png,P2
+s007,My cat is big,,assets/unit_icons/level3/s007.png,P2
+s008,My dog can run,,assets/unit_icons/level3/s008.png,P2
+s009,The sun is hot,,assets/unit_icons/level3/s009.png,P2
+s010,The mug is hot,,assets/unit_icons/level3/s010.png,P2
+s011,A pig is in mud,,assets/unit_icons/level3/s011.png,P2
+s012,A hen is on a bed,,assets/unit_icons/level3/s012.png,P2
+s013,A cat can nap,,assets/unit_icons/level3/s013.png,P2
+s014,A dog can hop,,assets/unit_icons/level3/s014.png,P2
+s015,I get up,,assets/unit_icons/level3/s015.png,P2
+s016,I sit down,,assets/unit_icons/level3/s016.png,P2
+s017,I can run fast,,assets/unit_icons/level3/s017.png,P2
+s018,I can jump,,assets/unit_icons/level3/s018.png,P2
+s019,My pen is red,,assets/unit_icons/level3/s019.png,P2
+s020,My bed is soft,,assets/unit_icons/level3/s020.png,P2
+s021,I see a red hat,,assets/unit_icons/level3/s021.png,P2
+s022,I see a big box,,assets/unit_icons/level3/s022.png,P2
+s023,A cat is in a box,,assets/unit_icons/level3/s023.png,P2
+s024,A dog is in a bag,,assets/unit_icons/level3/s024.png,P2
+s025,I am sad,,assets/unit_icons/level3/s025.png,P2
+s026,I am glad,,assets/unit_icons/level3/s026.png,P2
+s027,The bug is on me,,assets/unit_icons/level3/s027.png,P2
+s028,The cup is on top,,assets/unit_icons/level3/s028.png,P2
+s029,I can mix jam,,assets/unit_icons/level3/s029.png,P2
+s030,The man has a bag,,assets/unit_icons/level3/s030.png,P2
+s031,I hug my pup,,assets/unit_icons/level3/s031.png,P2
+s032,I cut a nut,,assets/unit_icons/level3/s032.png,P2
+s033,I see ten men,,assets/unit_icons/level3/s033.png,P2
+s034,I can get it,,assets/unit_icons/level3/s034.png,P2
+s035,I can set it,,assets/unit_icons/level3/s035.png,P2
+s036,A cat is on a mat,,assets/unit_icons/level3/s036.png,P2
+s037,A dog is on a log,,assets/unit_icons/level3/s037.png,P2
+s038,I have a pet dog,,assets/unit_icons/level3/s038.png,P2
+s039,I have a big cat,,assets/unit_icons/level3/s039.png,P2
+s040,I can clap,,assets/unit_icons/level3/s040.png,P2
+s041,I can jump up,,assets/unit_icons/level3/s041.png,P2
+s042,The bus is big,,assets/unit_icons/level3/s042.png,P2
+s043,The bed is wet,,assets/unit_icons/level3/s043.png,P2
+s044,The rug is wet,,assets/unit_icons/level3/s044.png,P2
+s045,The hat is on top,,assets/unit_icons/level3/s045.png,P2
+s046,I see a hot pot,,assets/unit_icons/level3/s046.png,P2
+s047,I see a fun game,,assets/unit_icons/level3/s047.png,P2
+s048,My cat can sit,,assets/unit_icons/level3/s048.png,P2
+s049,My dog can dig,,assets/unit_icons/level3/s049.png,P2
+s050,I see a ship,,assets/unit_icons/level3/s050.png,P3
+s051,I see a fish,,assets/unit_icons/level3/s051.png,P3
+s052,I have a chin,,assets/unit_icons/level3/s052.png,P3
+s053,I have a chip,,assets/unit_icons/level3/s053.png,P3
+s054,The fish is in a dish,,assets/unit_icons/level3/s054.png,P3
+s055,The ship is in the shop,,assets/unit_icons/level3/s055.png,P3
+s056,I can chat with you,,assets/unit_icons/level3/s056.png,P3
+s057,I can chop it,,assets/unit_icons/level3/s057.png,P3
+s058,I can quit,,assets/unit_icons/level3/s058.png,P3
+s059,I can quiz you,,assets/unit_icons/level3/s059.png,P3
+s060,What is that,,assets/unit_icons/level3/s060.png,P3
+s061,When is it,,assets/unit_icons/level3/s061.png,P3
+s062,Which one is best,,assets/unit_icons/level3/s062.png,P3
+s063,This is my shop,,assets/unit_icons/level3/s063.png,P3
+s064,That is a thin cat,,assets/unit_icons/level3/s064.png,P3
+s065,The moth is on the path,,assets/unit_icons/level3/s065.png,P3
+s066,The king can sing,,assets/unit_icons/level3/s066.png,P3
+s067,I sing a song,,assets/unit_icons/level3/s067.png,P3
+s068,I ring the bell,,assets/unit_icons/level3/s068.png,P3
+s069,The wing is big,,assets/unit_icons/level3/s069.png,P3
+s070,The bang is loud,,assets/unit_icons/level3/s070.png,P3
+s071,I can run quick,,assets/unit_icons/level3/s071.png,P3
+s072,I can whip fast,,assets/unit_icons/level3/s072.png,P3
+s073,I can shut it,,assets/unit_icons/level3/s073.png,P3
+s074,I can shop now,,assets/unit_icons/level3/s074.png,P3
+s075,The chip is hot,,assets/unit_icons/level3/s075.png,P3
+s076,The dish is wet,,assets/unit_icons/level3/s076.png,P3
+s077,The chat is fun,,assets/unit_icons/level3/s077.png,P3
+s078,The ship is long,,assets/unit_icons/level3/s078.png,P3
+s079,The fish can swim,,assets/unit_icons/level3/s079.png,P3
+s080,I can stop now,,assets/unit_icons/level3/s080.png,P4
+s081,I can step back,,assets/unit_icons/level3/s081.png,P4
+s082,I can spin fast,,assets/unit_icons/level3/s082.png,P4
+s083,A frog can hop,,assets/unit_icons/level3/s083.png,P4
+s084,A flag is up,,assets/unit_icons/level3/s084.png,P4
+s085,I clap my hands,,assets/unit_icons/level3/s085.png,P4
+s086,I clip the tag,,assets/unit_icons/level3/s086.png,P4
+s087,I grab the bag,,assets/unit_icons/level3/s087.png,P4
+s088,I trip and stop,,assets/unit_icons/level3/s088.png,P4
+s089,I plan a trip,,assets/unit_icons/level3/s089.png,P4
+s090,I drink milk,,assets/unit_icons/level3/s090.png,P4
+s091,My hand is wet,,assets/unit_icons/level3/s091.png,P4
+s092,This is the best gift,,assets/unit_icons/level3/s092.png,P4
+s093,The mask is soft,,assets/unit_icons/level3/s093.png,P4
+s094,Help me lift it,,assets/unit_icons/level3/s094.png,P4
+s095,I can jump high,,assets/unit_icons/level3/s095.png,P4
+s096,I can bump it,,assets/unit_icons/level3/s096.png,P4
+s097,The wind is brisk,,assets/unit_icons/level3/s097.png,P4
+s098,The bank is shut,,assets/unit_icons/level3/s098.png,P4
+s099,We camp in a tent,,assets/unit_icons/level3/s099.png,P4
+s100,A crab can snap,,assets/unit_icons/level3/s100.png,P4
+s101,A plum is fresh,,assets/unit_icons/level3/s101.png,P4
+s102,This is a grand plan,,assets/unit_icons/level3/s102.png,P4
+s103,I find a small pond,,assets/unit_icons/level3/s103.png,P4
+s104,The nest is damp,,assets/unit_icons/level3/s104.png,P4
+s105,I trust my friend,,assets/unit_icons/level3/s105.png,P4
+s106,I print a list,,assets/unit_icons/level3/s106.png,P4
+s107,I blend the milk,,assets/unit_icons/level3/s107.png,P4
+s108,I climb the step,,assets/unit_icons/level3/s108.png,P4
+s109,I feel left out,,assets/unit_icons/level3/s109.png,P4
+s110,I ride my bike,,assets/unit_icons/level3/s110.png,P5
+s111,I go home safe,,assets/unit_icons/level3/s111.png,P5
+s112,It is a rain day,,assets/unit_icons/level3/s112.png,P5
+s113,We play all day,,assets/unit_icons/level3/s113.png,P5
+s114,I see a green tree,,assets/unit_icons/level3/s114.png,P5
+s115,I see my feet,,assets/unit_icons/level3/s115.png,P5
+s116,We eat meat,,assets/unit_icons/level3/s116.png,P5
+s117,We sit in a boat,,assets/unit_icons/level3/s117.png,P5
+s118,It is a snow day,,assets/unit_icons/level3/s118.png,P5
+s119,I grow a seed,,assets/unit_icons/level3/s119.png,P5
+s120,The moon is bright,,assets/unit_icons/level3/s120.png,P5
+s121,I cook good food,,assets/unit_icons/level3/s121.png,P5
+s122,I read a book,,assets/unit_icons/level3/s122.png,P5
+s123,I toss a coin,,assets/unit_icons/level3/s123.png,P5
+s124,I see a toy,,assets/unit_icons/level3/s124.png,P5
+s125,I shout out loud,,assets/unit_icons/level3/s125.png,P5
+s126,A cow is in town,,assets/unit_icons/level3/s126.png,P5
+s127,I park the car,,assets/unit_icons/level3/s127.png,P5
+s128,I see a star,,assets/unit_icons/level3/s128.png,P5
+s129,The bird can sing,,assets/unit_icons/level3/s129.png,P5
+s130,I turn the page,,assets/unit_icons/level3/s130.png,P5
+s131,I see a fern,,assets/unit_icons/level3/s131.png,P5
+s132,A storm is here,,assets/unit_icons/level3/s132.png,P5
+s133,I sit on a chair,,assets/unit_icons/level3/s133.png,P5
+s134,It is a clear day,,assets/unit_icons/level3/s134.png,P5
+s135,I pull the rope,,assets/unit_icons/level3/s135.png,P5
+s136,A cute mule is here,,assets/unit_icons/level3/s136.png,P5
+s137,It is time to go,,assets/unit_icons/level3/s137.png,P5
+s138,We stay at home,,assets/unit_icons/level3/s138.png,P5
+s139,We grow slow,,assets/unit_icons/level3/s139.png,P5
+s140,We have a picnic,,assets/unit_icons/level3/s140.png,P6
+s141,The sunset is red,,assets/unit_icons/level3/s141.png,P6
+s142,A rabbit can hop,,assets/unit_icons/level3/s142.png,P6
+s143,The kitten can nap,,assets/unit_icons/level3/s143.png,P6
+s144,We like music class,,assets/unit_icons/level3/s144.png,P6
+s145,We go to the market,,assets/unit_icons/level3/s145.png,P6
+s146,I put it in my pocket,,assets/unit_icons/level3/s146.png,P6
+s147,The rocket can zoom,,assets/unit_icons/level3/s147.png,P6
+s148,Winter is cold here,,assets/unit_icons/level3/s148.png,P6
+s149,Summer is hot here,,assets/unit_icons/level3/s149.png,P6
+s150,We pack a basket,,assets/unit_icons/level3/s150.png,P6

@@ -109,13 +109,16 @@ def setup_voice_router(ctx: AppContext) -> Router:
                 pass
         return options, need_state
 
-    async def _send_stale_callback(callback: types.CallbackQuery) -> None:
+    async def _send_stale_callback(callback: types.CallbackQuery, show_alert: bool = True) -> None:
         try:
             if callback.message:
                 await callback.message.edit_reply_markup(reply_markup=None)
         except Exception:
             logger.debug("Failed to clear stale callback buttons.", exc_info=True)
-        await callback.answer("Сесія вже завершена або недоступна.", show_alert=True)
+        if show_alert:
+            await callback.answer("Сесія вже завершена або недоступна.", show_alert=True)
+        else:
+            await callback.answer()
         await start_or_continue(ctx, callback.message, level=None, user_id=callback.from_user.id)
 
     @router.message(Command("stop"))
@@ -280,7 +283,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
             if not state:
                 state = await ctx.session_service.get_active_session(user["id"])
             if not state:
-                await _send_stale_callback(callback)
+                await _send_stale_callback(callback, show_alert=False)
                 return
         pet_row = await ctx.repositories.pets.load_pet(user["id"])
         if pet_row is None:
