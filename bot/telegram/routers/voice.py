@@ -272,8 +272,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
         if session_id is not None:
             state = await ctx.session_service.get_session_for_user(session_id, user["id"])
             if not state:
-                await _send_stale_callback(callback)
-                return
+                state = await ctx.session_service.get_active_session(user["id"])
         pet_row = await ctx.repositories.pets.load_pet(user["id"])
         if pet_row is None:
             pet_types = ctx.pet_service.available_pet_types()
@@ -506,11 +505,13 @@ def setup_voice_router(ctx: AppContext) -> Router:
         if session_id is not None:
             state = await ctx.session_service.get_session_for_user(session_id, callback.from_user.id)
             if not state:
-                await _send_stale_callback(callback)
-                return
+                state = await ctx.session_service.get_active_session(callback.from_user.id)
             user = await ctx.repositories.users.get_user(callback.from_user.id)
             if not user:
                 await callback.answer("/start", show_alert=True)
+                return
+            if not state:
+                await _send_stale_callback(callback)
                 return
         else:
             user, state = await _load_active(callback.message, telegram_id=callback.from_user.id)
