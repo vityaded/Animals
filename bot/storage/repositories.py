@@ -118,7 +118,7 @@ class SessionRepository:
     async def get_active_sessions(self, now: datetime) -> List[dict]:
         async with self.database.connect() as conn:
             cursor = await conn.execute(
-                "SELECT * FROM sessions WHERE status IN ('pending','active') AND (due_at IS NULL OR due_at >= ?)",
+                "SELECT * FROM sessions WHERE status IN ('pending','active') AND due_at IS NOT NULL AND due_at >= ?",
                 (now,),
             )
             rows = await cursor.fetchall()
