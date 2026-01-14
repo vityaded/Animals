@@ -19,6 +19,7 @@ from bot.telegram.keyboards import (
 )
 from bot.telegram.media import answer_photo_safe
 from bot.telegram.media_utils import answer_photo_or_text
+from bot.telegram.routers.session import start_or_continue
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +110,7 @@ def setup_voice_router(ctx: AppContext) -> Router:
 
     async def _send_stale_callback(callback: types.CallbackQuery) -> None:
         await callback.answer("Сесія вже завершена або недоступна.", show_alert=True)
-        await callback.message.answer(
-            "Натисни «Піклуватися», щоб почати або продовжити.",
-            reply_markup=main_menu_kb(),
-        )
+        await start_or_continue(ctx, callback.message, level=None, user_id=callback.from_user.id)
 
     @router.message(Command("stop"))
     async def cmd_stop(message: types.Message) -> None:
