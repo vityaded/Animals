@@ -99,6 +99,10 @@ async def main() -> None:
     )
     await scheduler.start()
 
+    restarted = await session_service.restart_stuck_sessions()
+    if restarted:
+        logger.info("Перезапущено застрягші сесії: %s", restarted)
+
     logger.info("Запуск Telegram polling...")
     await dp.start_polling(bot)
 

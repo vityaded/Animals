@@ -242,6 +242,20 @@ class SessionStateRepository:
             row = await cursor.fetchone()
             return _row_to_dict(row)
 
+    async def list_stuck_states(self) -> List[dict]:
+        async with self.database.connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT ss.session_id, ss.user_id, ss.mode
+                FROM session_state ss
+                JOIN sessions s ON ss.session_id = s.id
+                WHERE ss.blocked=1 AND s.status IN ('pending','active')
+                ORDER BY ss.updated_at ASC
+                """
+            )
+            rows = await cursor.fetchall()
+            return _rows_to_dicts(rows)
+
     async def update_index(self, session_id: int, item_index: int) -> None:
         async with self.database.connect() as conn:
             await conn.execute(

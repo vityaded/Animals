@@ -239,6 +239,13 @@ class SessionService:
         await self.repositories.session_state.set_blocked(session_id, 0)
         await self.repositories.sessions.update_status(session_id, "active")
 
+    async def restart_stuck_sessions(self) -> int:
+        stuck_states = await self.repositories.session_state.list_stuck_states()
+        for state in stuck_states:
+            await self.repositories.session_state.set_blocked(state["session_id"], 0)
+            await self.repositories.sessions.update_status(state["session_id"], "active")
+        return len(stuck_states)
+
     async def get_items_for_level(self, level: int) -> list[ContentItem]:
         return self.content_service.get_level_items(level)
 
