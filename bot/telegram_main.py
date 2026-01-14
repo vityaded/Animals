@@ -75,10 +75,10 @@ async def main() -> None:
 
     async def on_deadline(label: str, when) -> None:
         now = when
-        active_sessions = await repositories.sessions.get_active_sessions(now)
-        for session in active_sessions:
+        deadline_sessions = await repositories.sessions.get_deadline_sessions(now)
+        for session in deadline_sessions:
             state = await repositories.session_state.get_state(session["id"])
-            if not state:
+            if not state or state.get("mode") == "freecare":
                 continue
             await repositories.sessions.update_status(session["id"], "blocked")
             await repositories.session_state.set_blocked(session["id"], 1)

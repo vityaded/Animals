@@ -124,6 +124,20 @@ class SessionRepository:
             rows = await cursor.fetchall()
             return _rows_to_dicts(rows)
 
+    async def get_deadline_sessions(self, now: datetime) -> List[dict]:
+        async with self.database.connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT * FROM sessions
+                WHERE status IN ('pending','active')
+                AND due_at IS NOT NULL
+                AND due_at >= ?
+                """,
+                (now,),
+            )
+            rows = await cursor.fetchall()
+            return _rows_to_dicts(rows)
+
     async def count_sessions_started_between(self, user_id: int, start_utc: datetime, end_utc: datetime) -> int:
         """Count sessions whose started_at is within [start_utc, end_utc). started_at is stored in UTC."""
         start_s = start_utc.strftime("%Y-%m-%d %H:%M:%S")
