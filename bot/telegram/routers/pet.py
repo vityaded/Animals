@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import FSInputFile
-
 from bot.telegram import AppContext
 from bot.telegram.keyboards import BTN_PET, choose_pet_inline_kb, main_menu_kb
+from bot.telegram.media_utils import answer_photo_or_text
 from bot.telegram.routers.session import start_or_continue
 
 
@@ -21,10 +20,7 @@ def setup_pet_router(ctx: AppContext) -> Router:
         path = ctx.pet_service.asset_path(pet.pet_type, state_key)
         text = ctx.pet_service.status_text(pet)
         msg = chat.message if isinstance(chat, types.CallbackQuery) else chat
-        if path and path.exists():
-            await msg.answer_photo(FSInputFile(str(path)), caption=text)
-        else:
-            await msg.answer(text)
+        await answer_photo_or_text(msg, path, text, reply_markup=main_menu_kb())
 
     async def _resume_session_if_active(message: types.Message, user_id: int) -> None:
         state = await ctx.session_service.get_active_session(user_id)

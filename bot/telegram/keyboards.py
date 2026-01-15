@@ -11,7 +11,13 @@ BTN_PET = "Моя тваринка"
 def main_menu_kb() -> types.ReplyKeyboardMarkup:
     # Minimal keyboard: start/continue care session or show pet.
     keyboard = [[types.KeyboardButton(text=BTN_CARE), types.KeyboardButton(text=BTN_PET)]]
-    return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=False)
+    return types.ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
+        input_field_placeholder="Обери дію нижче",
+    )
 
 
 PET_LABELS = {

@@ -44,7 +44,8 @@ def setup_menu_router(ctx: AppContext) -> Router:
             "\n".join(progress_parts)
             + f"\nStreak today / Серія сьогодні: {streak}"
             + f"\nHearts / Серця: {hearts}"
-            + f"\nPet state / Стан тваринки: {worst_need}"
+            + f"\nPet state / Стан тваринки: {worst_need}",
+            reply_markup=main_menu_kb(),
         )
 
     return router
