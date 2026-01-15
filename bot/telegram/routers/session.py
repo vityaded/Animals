@@ -130,7 +130,7 @@ async def start_or_continue(
     state_key = ctx.pet_service.pick_state(pet)
     img = ctx.pet_service.asset_path(pet.pet_type, state_key)
     caption = ctx.pet_service.status_text(pet)
-    await answer_photo_or_text(message, img, caption)
+    await answer_photo_or_text(message, img, caption, reply_markup=main_menu_kb())
     await _send_current_task(ctx, message, state)
 
 
