@@ -110,6 +110,9 @@ def setup_voice_router(ctx: AppContext) -> Router:
         return options, need_state
 
     async def _send_stale_callback(callback: types.CallbackQuery, show_alert: bool = True) -> None:
+        active = await ctx.session_service.get_active_session(callback.from_user.id)
+        if active:
+            show_alert = False
         try:
             if callback.message:
                 await callback.message.edit_reply_markup(reply_markup=None)
